@@ -1,0 +1,281 @@
+{% extends 'portal/admin/base_admin.html' %}
+
+{% block admin_title %}Usuarios{% endblock %}
+
+{% block admin_content %}
+<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <div>
+            <h3 style="margin-bottom:0.25rem">👥 Usuarios por Curso</h3>
+            <p style="color:var(--text-light);margin:0">Usuarios creados automáticamente desde DNI de alumnos</p>
+        </div>
+        <button class="btn btn-primary" onclick="abrirModalCrearUsuario()"
+            style="display:flex;align-items:center;gap:0.5rem">
+            ➕ Añadir Usuario
+        </button>
+    </div>
+
+    {% for curso, alumnos in alumnos_por_curso.items %}
+    <div style="margin-bottom:1.5rem">
+        <h4 style="background:var(--bg);padding:0.75rem;border-radius:8px;margin-bottom:0.5rem">📚 {{ curso }}</h4>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Alumno</th>
+                        <th>DNI (Usuario)</th>
+                        <th>Email</th>
+                        <th>Estado Contraseña</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in alumnos %}
+                    <tr>
+                        <td>{{ u.nombre_completo }}</td>
+                        <td><code>{{ u.dni }}</code></td>
+                        <td>
+                            {% if u.email %}
+                            {{ u.email }}
+                            {% else %}
+                            <span style="color:var(--warning)">Sin email</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if u.must_change_password %}
+                            <span class="badge badge-pending">Pendiente de cambio</span>
+                            {% else %}
+                            <span class="badge badge-verified">Actualizada</span>
+                            {% endif %}
+                        </td>
+                        <td style="display:flex;gap:0.5rem">
+                            {% if u.perfil %}
+                            <a href="{% url 'portal:admin_reset_password' u.perfil.id %}" class="btn btn-sm btn-outline"
+                                onclick="return confirm('¿Resetear contraseña a la genérica?')"
+                                title="Resetear contraseña"
+                                style="background:var(--warning);border-color:var(--warning);color:white;">🔄</a>
+                            <a href="#" class="btn btn-sm"
+                                onclick="forzarCambioPassword({{ u.perfil.id }}); return false;"
+                                title="Forzar cambio de contraseña"
+                                style="background:#e67e22;border-color:#e67e22;color:white;">🔒</a>
+                            {% else %}
+                            <span style="color:var(--text-light);font-size:0.8rem">Sin usuario</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% empty %}
+    <div style="text-align:center;padding:3rem;color:var(--text-light)">
+        <p>No hay alumnos registrados</p>
+        <p style="margin-top:0.5rem">Importe el archivo de alumnos desde la pestaña Importar</p>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+    function forzarCambioPassword(perfilId) {
+        if (confirm('¿Forzar a este usuario a cambiar su contraseña en el próximo inicio de sesión?')) {
+            fetch('/admin-panel/forzar-cambio-password/' + perfilId + '/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json'
+                }
+            })
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    if (data.success) {
+                        alert('Se marcó al usuario para cambiar contraseña');
+                        location.reload();
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(function (error) {
+                    alert('Error al procesar la solicitud');
+                });
+        }
+    }
+
+    function abrirModalCrearUsuario() {
+        document.getElementById('modalCrearUsuario').style.display = 'flex';
+    }
+
+    function cerrarModalCrearUsuario() {
+        document.getElementById('modalCrearUsuario').style.display = 'none';
+        document.getElementById('formCrearUsuario').reset();
+    }
+
+    function guardarNuevoUsuario(event) {
+        event.preventDefault();
+
+        var form = document.getElementById('formCrearUsuario');
+        var formData = new FormData(form);
+        var data = {};
+        formData.forEach(function (value, key) {
+            data[key] = value;
+        });
+
+        var btnGuardar = document.getElementById('btnGuardarUsuario');
+        btnGuardar.disabled = true;
+        btnGuardar.textContent = 'Guardando...';
+
+        fetch('{% url "portal:admin_crear_alumno" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    alert('Usuario creado exitosamente.\nUsuario: ' + data.dni + '\nContraseña: ' + data.password_default);
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.error);
+                    btnGuardar.disabled = false;
+                    btnGuardar.textContent = 'Guardar';
+                }
+            })
+            .catch(function (error) {
+                alert('Error al procesar la solicitud');
+                btnGuardar.disabled = false;
+                btnGuardar.textContent = 'Guardar';
+            });
+    }
+
+    // Cerrar modal al hacer click fuera
+    document.getElementById('modalCrearUsuario').addEventListener('click', function (e) {
+        if (e.target === this) {
+            cerrarModalCrearUsuario();
+        }
+    });
+</script>
+
+<!-- Modal Crear Usuario -->
+<div id="modalCrearUsuario"
+    style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;">
+    <div
+        style="background:white;border-radius:12px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div
+            style="padding:1.5rem;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;color:var(--primary);">➕ Añadir Nuevo Usuario</h3>
+            <button onclick="cerrarModalCrearUsuario()"
+                style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#999;">&times;</button>
+        </div>
+
+        <form id="formCrearUsuario" onsubmit="guardarNuevoUsuario(event)" style="padding:1.5rem;">
+            <h4 style="margin-bottom:1rem;color:#333;">📚 Datos del Alumno</h4>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+                <div>
+                    <label style="display:block;margin-bottom:0.25rem;font-weight:500;color:#555;">DNI del Alumno
+                        *</label>
+                    <input type="number" name="documento" required
+                        style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;"
+                        placeholder="Ej: 45123456">
+                </div>
+                <div>
+                    <label style="display:block;margin-bottom:0.25rem;font-weight:500;color:#555;">Apellido *</label>
+                    <input type="text" name="apellido" required
+                        style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;"
+                        placeholder="Ej: García">
+                </div>
+            </div>
+
+            <div style="margin-bottom:1rem;">
+                <label style="display:block;margin-bottom:0.25rem;font-weight:500;color:#555;">Nombres *</label>
+                <input type="text" name="nombres" required
+                    style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;"
+                    placeholder="Ej: Juan Carlos">
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+                <div>
+                    <label style="display:block;margin-bottom:0.25rem;font-weight:500;color:#555;">Nivel *</label>
+                    <select name="nivel" required
+                        style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;">
+                        <option value="">Seleccionar</option>
+                        <option value="I4">I4 - Inicial 4</option>
+                        <option value="I5">I5 - Inicial 5</option>
+                        <option value="P">P - Primaria</option>
+                        <option value="S">S - Secundaria</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;margin-bottom:0.25rem;font-weight:500;color:#555;">Curso *</label>
+                    <select name="curso" required
+                        style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;">
+                        <option value="">Seleccionar</option>
+                        <option value="1">1°</option>
+                        <option value="2">2°</option>
+                        <option value="3">3°</option>
+                        <option value="4">4°</option>
+                        <option value="5">5°</option>
+                        <option value="6">6°</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;margin-bottom:0.25rem;font-weight:500;color:#555;">División *</label>
+                    <select name="division" required
+                        style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;">
+                        <option value="">Seleccionar</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                    </select>
+                </div>
+            </div>
+
+            <h4 style="margin-bottom:1rem;color:#333;">👨‍👩‍👧 Datos del Tutor/Responsable</h4>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+                <div>
+                    <label style="display:block;margin-bottom:0.25rem;font-weight:500;color:#555;">Nombre del
+                        Tutor</label>
+                    <input type="text" name="tutor_nombre"
+                        style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;"
+                        placeholder="Ej: María López">
+                </div>
+                <div>
+                    <label style="display:block;margin-bottom:0.25rem;font-weight:500;color:#555;">DNI del Tutor</label>
+                    <input type="number" name="tutor_dni"
+                        style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;"
+                        placeholder="Ej: 25123456">
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.5rem;">
+                <label style="display:block;margin-bottom:0.25rem;font-weight:500;color:#555;">Email del Tutor *</label>
+                <input type="email" name="tutor_email" required
+                    style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;"
+                    placeholder="Ej: tutor@email.com">
+                <small style="color:#888;">Se usará para enviar avisos y notificaciones</small>
+            </div>
+
+            <div style="background:#f8f9fa;padding:1rem;border-radius:8px;margin-bottom:1.5rem;">
+                <p style="margin:0;color:#666;font-size:0.9rem;">
+                    <strong>ℹ️ Información:</strong> Se creará automáticamente un usuario con:<br>
+                    • <strong>Usuario:</strong> DNI del alumno<br>
+                    • <strong>Contraseña:</strong> Colegio123 (genérica)<br>
+                    • El tutor deberá cambiar la contraseña en su primer ingreso
+                </p>
+            </div>
+
+            <div style="display:flex;gap:1rem;justify-content:flex-end;">
+                <button type="button" onclick="cerrarModalCrearUsuario()" class="btn btn-outline"
+                    style="padding:0.75rem 1.5rem;">Cancelar</button>
+                <button type="submit" id="btnGuardarUsuario" class="btn btn-primary"
+                    style="padding:0.75rem 1.5rem;">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

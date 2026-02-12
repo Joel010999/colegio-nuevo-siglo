@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Padres - Colegio Nuevo Siglo</title>
+    <meta name="description" content="Consulte el estado de cuenta de sus hijos en el Colegio Nuevo Siglo">
+    <style>
+        :root {
+            /* Colores del logo Nuevo Siglo */
+            --primary: #8B1E3F;
+            --primary-dark: #6B1430;
+            --secondary: #FFC107;
+            --accent-orange: #FF8C00;
+            --accent-blue: #4ECDC4;
+            --danger: #dc2626;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --bg: #FDF8F5;
+            --card: #ffffff;
+            --text: #1f2937;
+            --text-light: #6b7280;
+            --border: #e5e7eb;
+            --shadow: 0 4px 6px -1px rgba(139, 30, 63, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--secondary);
+            color: #333;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th,
+        td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+
+        tr:hover {
+            background: #f9fafb;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-paid {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 1.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            opacity: 0.9;
+        }
+
+        .logo {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .search-box {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow);
+        }
+
+        .search-form {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+        }
+
+        .search-form .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        .total-box {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 2rem;
+            border-radius: 16px;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .total-box h2 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .total-box p {
+            opacity: 0.9;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .alert-info {
+            background: #FFF8E6;
+            color: var(--primary);
+            border: 1px solid #FFD54F;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+
+        .alumno-card {
+            background: var(--card);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+
+        .alumno-header {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .alumno-header h3 {
+            color: var(--primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .alumno-header p {
+            color: var(--text-light);
+            font-size: 0.875rem;
+        }
+
+        .alumno-body {
+            padding: 1rem 1.5rem;
+        }
+
+        .alumno-total {
+            background: var(--bg);
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .alumno-total strong {
+            font-size: 1.25rem;
+            color: var(--primary);
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-light);
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        @media (max-width: 768px) {
+            .search-form {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .total-box h2 {
+                font-size: 2rem;
+            }
+
+            th,
+            td {
+                padding: 0.5rem;
+                font-size: 0.875rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>
+                <img src="{% if logo_url %}{{ logo_url }}{% else %}/static/logo.jpg{% endif %}" alt="Logo" class="logo"
+                    onerror="this.style.display='none'">
+                Colegio Nuevo Siglo
+            </h1>
+            <p>Portal de Consulta de Estados de Cuenta</p>
+        </div>
+
+        <!-- Formulario de búsqueda -->
+        <div class="search-box">
+            <form method="GET" action="{% url 'portal:consulta' %}" class="search-form">
+                <div class="form-group">
+                    <label for="dni">🔍 Ingrese DNI del Alumno o Responsable</label>
+                    <input type="text" id="dni" name="dni" placeholder="Ej: 12345678" value="{{ dni_buscado }}"
+                        pattern="[0-9]+" title="Ingrese solo números" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Consultar</button>
+            </form>
+        </div>
+
+        {% if busqueda_realizada %}
+        {% if mensaje_error %}
+        <!-- Mensaje de error -->
+        <div class="alert alert-error">
+            ⚠️ {{ mensaje_error }}
+        </div>
+        {% elif alumnos %}
+        <!-- Total General -->
+        <div class="total-box">
+            <p>Deuda Total Pendiente</p>
+            <h2>${{ total_adeudado|floatformat:0|default:"0" }}</h2>
+        </div>
+
+        <!-- Listado de alumnos con sus deudas -->
+        {% for data in alumnos %}
+        <div class="alumno-card">
+            <div class="alumno-header">
+                <h3>{{ data.alumno.nombre_completo }}</h3>
+                <p>DNI: {{ data.alumno.documento }} | {{ data.alumno.curso_completo }}</p>
+            </div>
+
+            <div class="alumno-body">
+                {% if data.deudas %}
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Concepto</th>
+                                <th>Monto</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for deuda in data.deudas %}
+                            <tr>
+                                <td>{{ deuda.concepto.nombre }}</td>
+                                <td>${{ deuda.monto|floatformat:0 }}</td>
+                                <td>
+                                    {% if deuda.estado == 'pendiente' %}
+                                    <span class="badge badge-pending">⏳ Pendiente</span>
+                                    {% elif deuda.estado == 'pagado' %}
+                                    <span class="badge badge-paid">✅ Pagado</span>
+                                    {% else %}
+                                    <span class="badge">{{ deuda.get_estado_display }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="empty-state">No hay registros de deuda</p>
+                {% endif %}
+            </div>
+
+            <div class="alumno-total">
+                <span>Subtotal pendiente:</span>
+                <strong>${{ data.total|floatformat:0|default:"0" }}</strong>
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- Información de pago -->
+        <div class="alert alert-info">
+            <strong>📋 Información de Pago</strong><br>
+            Para realizar el pago, comuníquese con la administración del colegio
+            o utilice los medios de pago habilitados.
+        </div>
+
+        {% else %}
+        <!-- Sin resultados -->
+        <div class="card">
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3>No se encontraron resultados</h3>
+                <p>No hay registros asociados al DNI ingresado</p>
+            </div>
+        </div>
+        {% endif %}
+        {% else %}
+        <!-- Estado inicial -->
+        <div class="card">
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <h3>Consulte su Estado de Cuenta</h3>
+                <p>Ingrese el DNI del alumno o de cualquier responsable (padre, madre o tutor) para ver las deudas
+                    pendientes.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Footer -->
+    <footer style="text-align: center; padding: 2rem; color: var(--text-light); font-size: 0.875rem;">
+        <p>© 2024 Colegio Nuevo Siglo - Sistema de Consulta de Estados de Cuenta</p>
+    </footer>
+</body>
+
+</html>

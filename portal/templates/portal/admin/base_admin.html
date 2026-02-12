@@ -1,0 +1,55 @@
+{% extends 'portal/base.html' %}
+{% load static %}
+
+{% block title %}{% block admin_title %}Panel Admin{% endblock %}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <h1>
+            <img src="{% static 'portal/img/logo_nuevo_siglo.png' %}" alt="Logo" class="logo"
+                onerror="this.style.display='none'">
+            Panel Administrativo
+        </h1>
+        <div class="header-actions">
+            <span class="user-info">👤 {{ request.user.get_full_name|default:request.user.username }}</span>
+            <a href="{% url 'portal:logout' %}" class="btn btn-outline" style="background:white">Salir</a>
+        </div>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{% if message.tags == 'error' %}error{% else %}{{ message.tags }}{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Tabs -->
+    <div class="tabs">
+
+        <a href="{% url 'portal:admin_deudas' %}" class="tab {% if active_tab == 'deudas' %}active{% endif %}">📋
+            Deudas</a>
+        <a href="{% url 'portal:admin_pagos' %}" class="tab {% if active_tab == 'pagos' %}active{% endif %}">💳
+            Pagos</a>
+        <a href="{% url 'portal:admin_usuarios' %}" class="tab {% if active_tab == 'usuarios' %}active{% endif %}">👥
+            Usuarios</a>
+        <a href="{% url 'portal:admin_avisos' %}" class="tab {% if active_tab == 'avisos' %}active{% endif %}">📧
+            Avisos</a>
+        <a href="{% url 'portal:admin_archivos' %}" class="tab {% if active_tab == 'archivos' %}active{% endif %}">📂
+            Archivos</a>
+        <a href="{% url 'portal:admin_config' %}" class="tab {% if active_tab == 'config' %}active{% endif %}">⚙️
+            Config</a>
+        <a href="{% url 'portal:admin_auditoria' %}" class="tab {% if active_tab == 'auditoria' %}active{% endif %}">📜
+            Auditoría</a>
+    </div>
+
+    <!-- Tab Content -->
+    {% block admin_content %}{% endblock %}
+</div>
+
+<footer style="text-align: center; padding: 2rem; color: var(--text-light); font-size: 0.875rem;">
+    <p>Created by RenderByte | All Right Reserved</p>
+</footer>
+{% endblock %}

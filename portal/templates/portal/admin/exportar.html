@@ -1,0 +1,54 @@
+{% extends 'portal/admin/base_admin.html' %}
+
+{% block admin_title %}Exportar{% endblock %}
+
+{% block admin_content %}
+<div class="card">
+    <h3 style="margin-bottom:1rem">📤 Exportar Deudas</h3>
+    <p style="color:var(--text-light);margin-bottom:1rem">
+        Descargue un archivo con todas las deudas registradas en el sistema con el mismo formato del archivo de
+        importación.
+    </p>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>{{ alumnos_count }}</h3>
+            <p>Total de Alumnos</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ deudas_count }}</h3>
+            <p>Total de Deudas</p>
+        </div>
+        <div class="stat-card">
+            <h3 style="color:var(--primary)">${{ total_deuda|floatformat:0 }}</h3>
+            <p>Deuda Total</p>
+        </div>
+    </div>
+
+    <div style="display:flex;gap:1rem;margin-top:1.5rem;flex-wrap:wrap">
+        <form method="POST" action="{% url 'portal:admin_exportar' %}">
+            {% csrf_token %}
+            <input type="hidden" name="formato" value="excel">
+            <button type="submit" class="btn btn-primary" style="display:flex;align-items:center;gap:0.5rem">
+                📊 Descargar Excel (.xlsx)
+            </button>
+        </form>
+
+        <form method="POST" action="{% url 'portal:admin_exportar' %}">
+            {% csrf_token %}
+            <input type="hidden" name="formato" value="csv">
+            <button type="submit" class="btn btn-outline"
+                style="display:flex;align-items:center;gap:0.5rem;background:#27ae60;border-color:#27ae60;color:white">
+                📄 Descargar CSV (.csv)
+            </button>
+        </form>
+    </div>
+
+    <div style="margin-top:1.5rem;padding:1rem;background:#f8f9fa;border-radius:8px">
+        <p style="margin:0;color:#666;font-size:0.9rem">
+            <strong>ℹ️ Información:</strong> Los archivos exportados tienen el mismo formato que el archivo de deudas
+            importado, con columnas pivoteadas por concepto.
+        </p>
+    </div>
+</div>
+{% endblock %}

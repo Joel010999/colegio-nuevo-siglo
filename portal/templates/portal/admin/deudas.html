@@ -1,0 +1,135 @@
+{% extends 'portal/admin/base_admin.html' %}
+
+{% block admin_title %}Deudas{% endblock %}
+
+{% block admin_content %}
+<!-- Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>{{ deudas_count }}</h3>
+        <p>Deudas Cargadas</p>
+    </div>
+    <div class="stat-card">
+        <h3 style="color:var(--warning)">{{ pagos_pendientes }}</h3>
+        <p>Pagos Pendientes</p>
+    </div>
+    <div class="stat-card">
+        <h3 style="color:var(--success)">{{ pagos_verificados }}</h3>
+        <p>Pagos Verificados</p>
+    </div>
+    <div class="stat-card">
+        <h3>${{ total_recaudado|floatformat:0 }}</h3>
+        <p>Total Recaudado</p>
+    </div>
+</div>
+
+<div class="card">
+    <!-- Filtros -->
+    <form method="GET" class="filters" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center">
+        <!-- Nivel -->
+        <select name="nivel" onchange="this.form.submit()" style="flex:1;min-width:150px">
+            <option value="">Nivel</option>
+            {% for n in niveles %}
+            <option value="{{ n.val }}" {% if nivel_filter==n.val %}selected{% endif %}>{{ n.label }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- Curso -->
+        <select name="curso" onchange="this.form.submit()" style="flex:1;min-width:150px">
+            <option value="">Curso</option>
+            {% for c in cursos %}
+            <option value="{{ c.val }}" {% if curso_filter==c.val %}selected{% endif %}>{{ c.label }}</option>
+            {% endfor %}
+        </select>
+
+        <!-- División -->
+        <select name="division" onchange="this.form.submit()" style="flex:1;min-width:150px">
+            <option value="">División</option>
+            {% for d in divisiones %}
+            <option value="{{ d }}" {% if division_filter==d %}selected{% endif %}>División {{ d }}</option>
+            {% endfor %}
+        </select>
+
+        <div style="flex:1;min-width:200px;position:relative">
+            <input type="text" name="dni" value="{{ dni_filter|default:'' }}" placeholder="🔍 Buscar por DNI..."
+                style="width:100%;padding-right:2.5rem" onkeypress="if(event.key==='Enter'){this.form.submit()}">
+            {% if dni_filter %}
+            <a href="?nivel={{ nivel_filter }}&curso={{ curso_filter }}&division={{ division_filter }}&estado={{ estado_filter }}"
+                style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#999;text-decoration:none;font-size:1.2rem"
+                title="Limpiar búsqueda">✕</a>
+            {% endif %}
+        </div>
+
+        <select name="estado" onchange="this.form.submit()" style="flex:1;min-width:200px">
+            <option value="">Todos los cursos</option>
+            <option value="pendiente" {% if estado_filter=='pendiente' %}selected{% endif %}>Pendiente</option>
+            <option value="comprobante_enviado" {% if estado_filter=='comprobante_enviado' %}selected{% endif %}>
+                Comprobante Enviado</option>
+            <option value="pago_verificado" {% if estado_filter=='pago_verificado' %}selected{% endif %}>Pago Verificado
+            </option>
+        </select>
+
+        <button type="submit" class="btn btn-primary btn-sm">Buscar</button>
+    </form>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Alumno</th>
+                    <th>Curso</th>
+                    <th>Concepto</th>
+
+                    <th>Monto</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for deuda in deudas %}
+                <tr>
+                    <td>{{ deuda.id }}</td>
+                    <td>{{ deuda.alumno.nombre_completo }}</td>
+                    <td>{{ deuda.alumno.curso_completo }}</td>
+                    <td>{{ deuda.concepto.nombre }}</td>
+
+                    <td>${{ deuda.monto|floatformat:0 }}</td>
+                    <td>
+                        {% if deuda.estado == 'pendiente' %}
+                        <span class="badge badge-pending">Pendiente</span>
+                        {% elif deuda.estado == 'comprobante_enviado' %}
+                        <span class="badge badge-sent">Comprobante Enviado</span>
+                        {% elif deuda.estado == 'pago_verificado' %}
+                        <span class="badge badge-verified">Pago Verificado</span>
+                        {% else %}
+                        <span class="badge">{{ deuda.get_estado_display }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" style="text-align:center;padding:2rem;color:var(--text-light)">
+                        No se encontraron deudas con los filtros seleccionados
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Paginación -->
+    {% if deudas.has_other_pages %}
+    <div style="display:flex;justify-content:center;gap:0.5rem;margin-top:1rem">
+        {% if deudas.has_previous %}
+        <a href="?page={{ deudas.previous_page_number }}&nivel={{ nivel_filter }}&curso={{ curso_filter }}&division={{ division_filter }}&estado={{ estado_filter }}&dni={{ dni_filter }}"
+            class="btn btn-outline btn-sm">← Anterior</a>
+        {% endif %}
+        <span style="padding:0.5rem 1rem">Página {{ deudas.number }} de {{ deudas.paginator.num_pages }}</span>
+        {% if deudas.has_next %}
+        <a href="?page={{ deudas.next_page_number }}&nivel={{ nivel_filter }}&curso={{ curso_filter }}&division={{ division_filter }}&estado={{ estado_filter }}&dni={{ dni_filter }}"
+            class="btn btn-outline btn-sm">Siguiente →</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

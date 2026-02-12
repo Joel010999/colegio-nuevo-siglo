@@ -1,0 +1,38 @@
+{% extends 'portal/admin/base_admin.html' %}
+
+{% block admin_title %}Auditoría{% endblock %}
+
+{% block admin_content %}
+<div class="card">
+    <h3 style="margin-bottom:1rem">📜 Log de Auditoría</h3>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha/Hora</th>
+                    <th>Usuario</th>
+                    <th>Acción</th>
+                    <th>Detalles</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for registro in registros %}
+                <tr>
+                    <td>{{ registro.timestamp|date:"d/m/Y H:i:s" }}</td>
+                    <td>{{ registro.usuario.username|default:"Sistema" }}</td>
+                    <td><strong>{{ registro.get_accion_display }}</strong></td>
+                    <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">{{ registro.detalles }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" style="text-align:center;padding:2rem;color:var(--text-light)">
+                        No hay registros de auditoría
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

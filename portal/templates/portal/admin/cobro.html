@@ -1,0 +1,36 @@
+{% extends 'portal/admin/base_admin.html' %}
+
+{% block admin_title %}Publicar Pagos{% endblock %}
+
+{% block admin_content %}
+<div class="card">
+    <h3 style="margin-bottom:1.5rem">📢 Publicar Pagos Mensuales</h3>
+
+    <form method="POST">
+        {% csrf_token %}
+        <div class="form-group" style="max-width: 500px;">
+            <label for="concepto">Concepto:</label>
+            <select id="concepto" name="concepto" required>
+                <option value="" disabled selected>-- Seleccione un concepto --</option>
+                {% for concepto in conceptos %}
+                <option value="{{ concepto.id }}">{{ concepto.nombre }} ({{ concepto.codigo }})</option>
+                {% endfor %}
+            </select>
+            <small style="color:var(--text-light)">Seleccione el concepto de pago (corresponde a las columnas I-Y del
+                archivo).</small>
+        </div>
+
+        <div class="form-group" style="max-width: 500px;">
+            <label for="monto">Monto a Abonar ($):</label>
+            <input type="number" id="monto" name="monto" required min="1" step="0.01" placeholder="Ej: 15000">
+            <small style="color:var(--text-light)">Ingrese el valor que se asignará a este concepto para todos los
+                alumnos.</small>
+        </div>
+
+        <!-- Placeholder for future functionality -->
+        <button type="button" class="btn btn-primary" disabled style="opacity:0.6; cursor:not-allowed">
+            Generar Deudas (Próximamente)
+        </button>
+    </form>
+</div>
+{% endblock %}

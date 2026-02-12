@@ -1,0 +1,147 @@
+{% extends 'portal/base.html' %}
+{% load static %}
+
+{% block title %}Recibo - {{ pago.numero_operacion }}{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .receipt {
+        background: white;
+        border: 2px solid var(--border);
+        padding: 2rem;
+        max-width: 400px;
+        margin: 0 auto;
+    }
+
+    .receipt-header {
+        text-align: center;
+        border-bottom: 2px dashed var(--border);
+        padding-bottom: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .receipt-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+
+    .receipt-logo {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        object-fit: cover;
+        margin-bottom: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:600px">
+    <div class="header" style="justify-content:center">
+        <h1>
+            <img src="{% static 'portal/logo.jpg' %}" alt="Logo" class="logo" onerror="this.style.display='none'">
+            Recibo de Pago
+        </h1>
+    </div>
+
+    <div class="alert alert-{% if pago.estado == 'verificado' %}success{% else %}info{% endif %}">
+        {% if pago.estado == 'verificado' %}
+        <strong>✅ Pago Verificado</strong><br>
+        Este pago ha sido verificado por administración.
+        {% else %}
+        <strong>📤 Comprobante Enviado</strong><br>
+        Su comprobante fue recibido y está pendiente de verificación.
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="receipt" id="receiptContent">
+            <div class="receipt-header">
+                <img src="{% static 'portal/logo.jpg' %}" alt="Logo" class="receipt-logo"
+                    onerror="this.style.display='none'">
+                <h3>Colegio Nuevo Siglo</h3>
+                <p>{% if pago.estado == 'verificado' %}Recibo Oficial{% else %}Recibo Provisorio{% endif %}</p>
+                <p><strong>{{ pago.numero_operacion }}</strong></p>
+            </div>
+
+            <div class="receipt-row">
+                <span>Fecha:</span>
+                <span>{{ pago.fecha_envio|date:"d/m/Y" }}</span>
+            </div>
+            <div class="receipt-row">
+                <span>Alumno:</span>
+                <span>{{ alumno.nombre_completo }}</span>
+            </div>
+            <div class="receipt-row">
+                <span>DNI:</span>
+                <span>{{ alumno.documento }}</span>
+            </div>
+            <div class="receipt-row">
+                <span>Curso:</span>
+                <span>{{ alumno.curso_completo }}</span>
+            </div>
+            <div class="receipt-row">
+                <span>Concepto:</span>
+                <span>{{ deuda.concepto.nombre }}</span>
+            </div>
+            {% if deuda.periodo %}
+            <div class="receipt-row">
+                <span>Período:</span>
+                <span>{{ deuda.periodo }}</span>
+            </div>
+            {% endif %}
+            <div class="receipt-row"
+                style="font-size:1.25rem;font-weight:bold;border-top:2px dashed var(--border);padding-top:0.5rem;margin-top:0.5rem">
+                <span>Monto:</span>
+                <span>${{ pago.monto_pagado|floatformat:0 }}</span>
+            </div>
+
+            {% if pago.estado != 'verificado' %}
+            <p style="text-align:center;margin-top:1rem;font-size:0.75rem;color:var(--text-light)">
+                Este recibo es provisorio.<br>Pendiente de verificación por administración.
+            </p>
+            {% else %}
+            <p style="text-align:center;margin-top:1rem;font-size:0.75rem;color:var(--success)">
+                ✓ Pago verificado el {{ pago.fecha_verificacion|date:"d/m/Y" }}
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div style="display:flex;gap:1rem;justify-content:center;margin-top:1rem">
+        <button class="btn btn-primary" onclick="descargarRecibo()" id="btnDescargar">📥 Descargar Recibo</button>
+        <a href="{% url 'portal:portal_padre' %}" class="btn btn-outline">← Volver al Portal</a>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+    function descargarRecibo() {
+        var btn = document.getElementById('btnDescargar');
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Generando...';
+
+        var element = document.getElementById('receiptContent');
+
+        html2canvas(element, {
+            backgroundColor: '#ffffff',
+            scale: 2,
+            useCORS: true,
+            logging: false
+        }).then(function (canvas) {
+            var link = document.createElement('a');
+            link.download = 'recibo_{{ pago.numero_operacion }}.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+
+            btn.disabled = false;
+            btn.innerHTML = '📥 Descargar Recibo';
+        }).catch(function (error) {
+            alert('Error al generar el recibo: ' + error);
+            btn.disabled = false;
+            btn.innerHTML = '📥 Descargar Recibo';
+        });
+    }
+</script>
+{% endblock %}

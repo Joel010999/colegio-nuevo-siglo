@@ -1,0 +1,90 @@
+{% extends 'portal/admin/base_admin.html' %}
+
+{% block admin_title %}Verificar Pago{% endblock %}
+
+{% block admin_content %}
+<div class="card">
+    <h3 style="margin-bottom:1rem">📋 Detalle del Pago</h3>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:1rem;margin-bottom:1.5rem">
+        <div>
+            <strong>Nº Operación:</strong><br>
+            {{ pago.numero_operacion }}
+        </div>
+        <div>
+            <strong>Fecha:</strong><br>
+            {{ pago.fecha_envio|date:"d/m/Y H:i" }}
+        </div>
+        <div>
+            <strong>Alumno:</strong><br>
+            {{ pago.deuda.alumno.nombre_completo }}
+        </div>
+        <div>
+            <strong>Curso:</strong><br>
+            {{ pago.deuda.alumno.curso_completo }}
+        </div>
+        <div>
+            <strong>Concepto:</strong><br>
+            {{ pago.deuda.concepto.nombre }}
+        </div>
+        <div>
+            <strong>Período:</strong><br>
+            {{ pago.deuda.periodo|default:"-" }}
+        </div>
+        <div>
+            <strong>Monto Original:</strong><br>
+            ${{ pago.deuda.monto|floatformat:0 }}
+        </div>
+        <div>
+            <strong>Monto Pagado:</strong><br>
+            <span style="font-size:1.25rem;color:var(--primary)">${{ pago.monto_pagado|floatformat:0 }}</span>
+        </div>
+        <div>
+            <strong>Responsable:</strong><br>
+            {{ pago.usuario_responsable.get_full_name|default:pago.usuario_responsable.username }}
+        </div>
+        <div>
+            <strong>Estado:</strong><br>
+            {% if pago.estado == 'pendiente' %}
+            <span class="badge badge-sent">⏳ Pendiente</span>
+            {% elif pago.estado == 'verificado' %}
+            <span class="badge badge-verified">✅ Verificado</span>
+            {% else %}
+            <span class="badge badge-danger">❌ Rechazado</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <h4 style="margin:1.5rem 0 1rem">📎 Comprobante:</h4>
+    {% if pago.comprobante %}
+    <div style="text-align:center">
+        <img src="{{ pago.comprobante.url }}"
+            style="max-width:100%;max-height:400px;border-radius:8px;border:1px solid var(--border)">
+        <br>
+        <a href="{{ pago.comprobante.url }}" target="_blank" class="btn btn-outline btn-sm" style="margin-top:1rem">📥
+            Abrir en nueva pestaña</a>
+    </div>
+    {% else %}
+    <p style="color:var(--text-light)">No hay comprobante adjunto</p>
+    {% endif %}
+
+    {% if pago.estado == 'pendiente' %}
+    <div style="display:flex;gap:1rem;justify-content:center;margin-top:2rem;flex-wrap:wrap">
+        <form method="POST" style="display:inline">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="verificar">
+            <button type="submit" class="btn btn-success">✅ Verificar Pago</button>
+        </form>
+        <form method="POST" style="display:inline" onsubmit="return confirm('¿Está seguro de rechazar este pago?')">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="rechazar">
+            <button type="submit" class="btn btn-danger">❌ Rechazar</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <div style="margin-top:2rem">
+        <a href="{% url 'portal:admin_pagos' %}" class="btn btn-outline">← Volver a Pagos</a>
+    </div>
+</div>
+{% endblock %}

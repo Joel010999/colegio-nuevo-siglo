@@ -1,0 +1,150 @@
+{% extends 'portal/admin/base_admin.html' %}
+
+{% block admin_title %}Importar Deudas{% endblock %}
+
+{% block admin_content %}
+<div class="card">
+    <h3 style="margin-bottom:1rem">📥 Importar Deudas desde Excel del Sistema del Colegio</h3>
+
+    <div class="alert alert-success">
+        <strong>✅ Formato del Colegio Detectado Automáticamente</strong><br>
+        El sistema reconoce automáticamente el archivo Excel que exporta el sistema del colegio con las siguientes
+        columnas:
+        <div style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.5rem">
+            <span class="badge badge-verified">Familia</span>
+            <span class="badge badge-verified">Documento</span>
+            <span class="badge badge-verified">Apellido</span>
+            <span class="badge badge-verified">Nombres</span>
+            <span class="badge badge-verified">Niv</span>
+            <span class="badge badge-verified">Cur</span>
+            <span class="badge badge-verified">Div</span>
+            <span class="badge badge-verified">0_Matrícula</span>
+            <span class="badge badge-verified">1_Cuota ... 10_Cuota</span>
+            <span class="badge badge-verified">20_Material Didactico</span>
+            <span class="badge badge-verified">etc...</span>
+        </div>
+    </div>
+
+    <div class="alert alert-info">
+        <strong>💡 ¿Cómo funciona?</strong>
+        <ul style="margin-top:0.5rem;padding-left:1.5rem">
+            <li>El sistema toma las columnas de <strong>Documento, Apellido, Nombres, Niv, Cur, Div</strong> para
+                identificar alumnos</li>
+            <li>Cada columna de concepto (ej: <code>0_Matrícula</code>, <code>1_Cuota</code>) se convierte en una deuda
+                individual</li>
+            <li>Solo se importan celdas con valores mayores a 0</li>
+            <li>Se crean usuarios automáticamente con el DNI como nombre de usuario</li>
+        </ul>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="file-upload" onclick="document.getElementById('archivo').click()" style="margin:1.5rem 0">
+            <input type="file" id="archivo" name="archivo" accept=".xlsx,.xls,.csv" required
+                onchange="previewFilename(this)">
+            <p id="uploadText" style="font-size:1.1rem">📊 Click para seleccionar archivo Excel (.xlsx)</p>
+            <small>También soporta: .xls, .csv</small>
+        </div>
+
+        <div class="form-group" style="background:var(--bg);padding:1rem;border-radius:8px">
+            <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0">
+                <input type="checkbox" name="reemplazar" style="width:auto">
+                <span><strong>Actualizar montos de deudas existentes</strong></span>
+            </label>
+            <p style="margin-top:0.5rem;font-size:0.875rem;color:var(--text-light);padding-left:1.5rem">
+                Si está marcado, las deudas existentes del mismo alumno/concepto serán actualizadas con el nuevo
+                monto.<br>
+                Si no está marcado, las deudas duplicadas serán omitidas (útil para importar solo deudas nuevas).
+            </p>
+        </div>
+
+        <button type="submit" class="btn btn-primary"
+            style="margin-top:1rem;width:100%;justify-content:center;padding:1rem">
+            🚀 Importar Archivo
+        </button>
+    </form>
+</div>
+
+{% if resultados %}
+<div class="card" style="margin-top:1rem">
+    <h3 style="margin-bottom:1rem">📊 Resultados de la Importación</h3>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3 style="color:var(--success)">{{ resultados.added }}</h3>
+            <p>Deudas Nuevas</p>
+        </div>
+        <div class="stat-card">
+            <h3 style="color:var(--primary)">{{ resultados.updated }}</h3>
+            <p>Actualizadas</p>
+        </div>
+        <div class="stat-card">
+            <h3 style="color:var(--warning)">{{ resultados.duplicados }}</h3>
+            <p>Duplicados (omitidos)</p>
+        </div>
+        <div class="stat-card">
+            <h3 style="color:var(--accent-blue)">{{ resultados.users_created }}</h3>
+            <p>Usuarios Creados</p>
+        </div>
+    </div>
+
+    {% if resultados.errores %}
+    <div class="alert alert-warning" style="margin-top:1rem">
+        <strong>⚠️ Filas con errores ({{ resultados.total_errores }}):</strong>
+        <ul style="margin-top:0.5rem;padding-left:1.5rem">
+            {% for error in resultados.errores %}
+            <li>{{ error }}</li>
+            {% endfor %}
+            {% if resultados.total_errores > 20 %}
+            <li style="color:var(--text-light)">... y {{ resultados.total_errores|add:"-20" }} errores más</li>
+            {% endif %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="card" style="margin-top:1rem">
+    <h4 style="margin-bottom:1rem">📋 Conceptos Reconocidos</h4>
+    <p style="color:var(--text-light);margin-bottom:1rem">
+        El sistema reconoce automáticamente las columnas de concepto con formato <code>N_NombreConcepto</code>:
+    </p>
+    <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
+        <span class="badge">0_Matrícula</span>
+        <span class="badge">1_Cuota</span>
+        <span class="badge">2_Cuota</span>
+        <span class="badge">3_Cuota</span>
+        <span class="badge">4_Cuota</span>
+        <span class="badge">5_Cuota</span>
+        <span class="badge">6_Cuota</span>
+        <span class="badge">7_Cuota</span>
+        <span class="badge">8_Cuota</span>
+        <span class="badge">9_Cuota</span>
+        <span class="badge">10_Cuota</span>
+        <span class="badge">20_Material Didactico</span>
+        <span class="badge">27_MATRICULA NOV S</span>
+        <span class="badge">31_CUOTA ADMISION</span>
+        <span class="badge">34_MATRICULA NUEVOS P</span>
+        <span class="badge">etc...</span>
+    </div>
+</div>
+
+<div class="alert alert-info" style="margin-top:1rem">
+    <strong>💡 También soporta formato genérico</strong><br>
+    Si el archivo no tiene el formato del colegio, el sistema intentará usar las columnas:
+    <code>alumno</code>, <code>dni</code>, <code>curso</code>, <code>concepto</code>, <code>monto</code>,
+    <code>periodo</code>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function previewFilename(input) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            const icon = file.name.endsWith('.csv') ? '📄' : '📊';
+            document.getElementById('uploadText').innerHTML = icon + ' ' + file.name;
+        }
+    }
+</script>
+{% endblock %}

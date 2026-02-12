@@ -1,0 +1,400 @@
+{% extends 'portal/admin/base_admin.html' %}
+
+{% block admin_title %}Avisos{% endblock %}
+
+{% block admin_content %}
+<div class="card">
+
+    <!-- Send all button -->
+    <div style="margin-bottom:1.5rem; display:flex; gap:1rem;">
+        <button class="btn btn-primary" onclick="abrirModalMasivo()">
+            📧 AVISO DE CUOTA A PAGAR
+        </button>
+        <button class="btn btn-primary" onclick="abrirModalPagoVencer()">
+            📅 PAGO A VENCER
+        </button>
+    </div>
+
+    <h4 style="margin-bottom:1rem">📋 Lista de Morosos ({{ morosos|length }})</h4>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Alumno</th>
+                    <th>Curso</th>
+                    <th>Email</th>
+                    <th>Deuda Total</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in morosos %}
+                <tr>
+                    <td>{{ m.alumno.nombres }} {{ m.alumno.apellido }}</td>
+                    <td>{{ m.alumno.curso_completo }}</td>
+                    <td>
+                        {% if m.email %}
+                        {{ m.email }}
+                        {% else %}
+                        <span class="badge badge-pending">Sin email</span>
+                        {% endif %}
+                    </td>
+                    <td><strong>${{ m.total_deuda|floatformat:"0"|default:"0" }}</strong></td>
+                    <td>
+                        {% if m.email %}
+                        <button
+                            onclick="abrirModalIndividual('{{ m.email }}', '{{ m.alumno.nombres }} {{ m.alumno.apellido }}', '{{ m.total_deuda|floatformat:0 }}', '{{ m.alumno.curso_completo }}')"
+                            class="btn btn-sm btn-primary">📧 Enviar</button>
+                        {% else %}
+                        <span style="color:var(--text-light)">No disponible</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" style="text-align:center;padding:2rem;color:var(--success)">
+                        ✅ No hay morosos registrados
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal para envío masivo -->
+<div id="modalMasivo" class="modal"
+    style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;">
+    <div
+        style="background:white;border-radius:12px;padding:2rem;max-width:600px;width:90%;max-height:90vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+            <h3 style="margin:0;color:var(--primary)" id="modalTitle">📧 Enviar Avisos Masivos</h3>
+            <button onclick="cerrarModalMasivo()"
+                style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#666;">&times;</button>
+        </div>
+
+        <p style="color:var(--text-light);margin-bottom:1rem;">
+            Se enviará un email a <strong>{{ morosos|length }} morosos</strong> con email registrado.
+        </p>
+
+        <div id="variablesInfo"
+            style="background:#e8f4fd;border-radius:8px;padding:1rem;margin-bottom:1.5rem;border-left:4px solid #2196F3;">
+            <strong style="color:#1976D2">💡 Variables disponibles:</strong>
+            <ul style="margin:0.5rem 0 0 1rem;color:#1976D2;font-size:0.9rem;">
+                <li><code>{alumno}</code> - Nombre del alumno</li>
+                <li><code>{deuda}</code> - Monto de la deuda</li>
+                <li><code>{curso}</code> - Curso del alumno</li>
+            </ul>
+        </div>
+
+        <form id="formMasivo" onsubmit="enviarMasivo(event)">
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label style="display:block;margin-bottom:0.5rem;font-weight:600;">Asunto <span
+                        style="color:#c00">*</span></label>
+                <input type="text" id="asunto" name="asunto" required
+                    style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;"
+                    placeholder="Ej: Aviso de deuda pendiente - Colegio Nuevo Siglo">
+            </div>
+
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label style="display:block;margin-bottom:0.5rem;font-weight:600;">Mensaje <span
+                        style="color:#c00">*</span></label>
+                <textarea id="mensaje" name="mensaje" required rows="8"
+                    style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;resize:vertical;"
+                    placeholder="Escriba el mensaje aquí...">Estimado/a padre, madre o tutor de {alumno}:
+
+Le informamos que registra una deuda pendiente de {deuda} correspondiente a {curso}.
+
+Para regularizar su situación, ingrese al portal de pagos del colegio.
+
+Atentamente,
+Colegio Nuevo Siglo</textarea>
+            </div>
+
+            <div id="resultadoEnvio" style="display:none;padding:1rem;border-radius:8px;margin-bottom:1rem;"></div>
+
+            <div style="display:flex;gap:1rem;justify-content:flex-end;">
+                <button type="button" onclick="cerrarModalMasivo()" class="btn btn-outline" style="background:#f5f5f5;">
+                    Cancelar
+                </button>
+                <button type="submit" id="btnEnviar" class="btn btn-primary">
+                    📧 Enviar a Todos
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal para envío individual -->
+<div id="modalIndividual" class="modal"
+    style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center;">
+    <div
+        style="background:white;border-radius:12px;padding:2rem;max-width:600px;width:90%;max-height:90vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+            <h3 style="margin:0;color:var(--primary)">📧 Enviar Aviso Individual</h3>
+            <button onclick="cerrarModalIndividual()"
+                style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#666;">&times;</button>
+        </div>
+
+        <p style="color:var(--text-light);margin-bottom:1rem;">
+            Enviando email a: <strong id="indiv_email_display"></strong>
+            <br>Alumno: <strong id="indiv_alumno_display"></strong>
+        </p>
+
+        <form id="formIndividual" onsubmit="enviarIndividual(event)">
+            <input type="hidden" id="indiv_email" name="email">
+
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label style="display:block;margin-bottom:0.5rem;font-weight:600;">Asunto <span
+                        style="color:#c00">*</span></label>
+                <input type="text" id="indiv_asunto" name="asunto" required
+                    style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;"
+                    value="Aviso de deuda pendiente - Colegio Nuevo Siglo">
+            </div>
+
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label style="display:block;margin-bottom:0.5rem;font-weight:600;">Mensaje <span
+                        style="color:#c00">*</span></label>
+                <textarea id="indiv_mensaje" name="mensaje" required rows="8"
+                    style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;resize:vertical;"></textarea>
+            </div>
+
+            <div id="resultadoEnvioIndiv" style="display:none;padding:1rem;border-radius:8px;margin-bottom:1rem;"></div>
+
+            <div style="display:flex;gap:1rem;justify-content:flex-end;">
+                <button type="button" onclick="cerrarModalIndividual()" class="btn btn-outline"
+                    style="background:#f5f5f5;">
+                    Cancelar
+                </button>
+                <button type="submit" id="btnEnviarIndiv" class="btn btn-primary">
+                    🚀 Enviar Email
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function abrirModalMasivo() {
+        document.getElementById('modalMasivo').style.display = 'flex';
+        document.getElementById('resultadoEnvio').style.display = 'none';
+        document.getElementById('modalTitle').innerText = '📧 AVISO DE CUOTA A PAGAR';
+
+        // Show variables info for this mode
+        document.getElementById('variablesInfo').style.display = 'block';
+
+        // Reset to default generic message
+        document.getElementById('asunto').value = 'Aviso de deuda pendiente - Colegio Nuevo Siglo';
+        document.getElementById('mensaje').value = `Estimado/a padre, madre o tutor de {alumno}:
+
+Le informamos que registra una deuda pendiente de {deuda} correspondiente a {curso}.
+
+Para regularizar su situación, ingrese al portal de pagos del colegio.
+
+Atentamente,
+Colegio Nuevo Siglo`;
+
+        document.body.style.overflow = 'hidden';
+    }
+
+    function abrirModalPagoVencer() {
+        document.getElementById('modalMasivo').style.display = 'flex';
+        document.getElementById('resultadoEnvio').style.display = 'none';
+        document.getElementById('modalTitle').innerText = '📅 PAGO A VENCER';
+
+        // Hide variables info for this mode
+        document.getElementById('variablesInfo').style.display = 'none';
+
+        // Set specific content for Pago a Vencer
+        document.getElementById('asunto').value = 'Aviso de Cuota Disponible - Colegio Nuevo Siglo';
+        document.getElementById('mensaje').value = `Estimadas familias del Centro Educativo Nuevo Siglo:
+
+Por medio del presente, les informamos que ya se encuentra disponible la cuota correspondiente al mes de ........... 2026.
+Podrán ingresar al siguiente link para verificar los importes y efectuar el pago:
+
+👉 renderbyte.net
+
+Les recordamos que los aranceles mensuales tienen como fecha de vencimiento el día 10 de cada mes.
+
+Ante cualquier duda o consulta, quedamos a su disposición a través de los siguientes contactos:
+
+📞 Rodrigo: 351-6336428
+📞 Yanina: 351-6336408
+
+Saludamos atentamente.
+
+Administración Nuevo Siglo`;
+
+        document.body.style.overflow = 'hidden';
+    }
+
+    function cerrarModalMasivo() {
+        document.getElementById('modalMasivo').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    // Cerrar modal al hacer clic fuera
+    document.getElementById('modalMasivo').addEventListener('click', function (e) {
+        if (e.target === this) {
+            cerrarModalMasivo();
+        }
+    });
+
+    // Cerrar con Escape
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            cerrarModalMasivo();
+            cerrarModalIndividual();
+        }
+    });
+
+    function abrirModalIndividual(email, nombre, deuda, curso) {
+        document.getElementById('modalIndividual').style.display = 'flex';
+        document.getElementById('resultadoEnvioIndiv').style.display = 'none';
+        document.body.style.overflow = 'hidden';
+
+        // Pre-fill data
+        document.getElementById('indiv_email').value = email;
+        document.getElementById('indiv_email_display').innerText = email;
+        document.getElementById('indiv_alumno_display').innerText = nombre;
+
+        // Default message
+        const mensaje = `Estimado/a padre, madre o tutor de ${nombre}:
+
+Le informamos que registra una deuda pendiente de $${deuda} correspondiente a ${curso}.
+
+Para regularizar su situación, ingrese al portal de pagos del colegio.
+
+Atentamente,
+Colegio Nuevo Siglo`;
+
+        document.getElementById('indiv_mensaje').value = mensaje;
+    }
+
+    function cerrarModalIndividual() {
+        document.getElementById('modalIndividual').style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+
+    // Close individual modal on outside click
+    document.getElementById('modalIndividual').addEventListener('click', function (e) {
+        if (e.target === this) {
+            cerrarModalIndividual();
+        }
+    });
+
+    function enviarIndividual(event) {
+        event.preventDefault();
+
+        const btn = document.getElementById('btnEnviarIndiv');
+        const resultado = document.getElementById('resultadoEnvioIndiv');
+        const email = document.getElementById('indiv_email').value;
+        const asunto = document.getElementById('indiv_asunto').value;
+        const mensaje = document.getElementById('indiv_mensaje').value;
+
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Enviando...';
+        resultado.style.display = 'none';
+
+        const formData = new FormData();
+        formData.append('email', email);
+        formData.append('asunto', asunto);
+        formData.append('mensaje', mensaje);
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        fetch('{% url "portal:admin_enviar_aviso_individual" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = '🚀 Enviar Email';
+
+                resultado.style.display = 'block';
+
+                if (data.success) {
+                    resultado.style.background = '#d4edda';
+                    resultado.style.color = '#155724';
+                    resultado.innerHTML = `<strong>✅ ${data.message}</strong>`;
+                    setTimeout(() => cerrarModalIndividual(), 2000);
+                } else {
+                    resultado.style.background = '#f8d7da';
+                    resultado.style.color = '#721c24';
+                    resultado.innerHTML = `<strong>❌ Error:</strong> ${data.error}`;
+                }
+            })
+            .catch(error => {
+                btn.disabled = false;
+                btn.innerHTML = '🚀 Enviar Email';
+
+                resultado.style.display = 'block';
+                resultado.style.background = '#f8d7da';
+                resultado.style.color = '#721c24';
+                resultado.innerHTML = `<strong>❌ Error de conexión:</strong> ${error.message}`;
+            });
+    }
+
+    function enviarMasivo(event) {
+        event.preventDefault();
+
+        const btn = document.getElementById('btnEnviar');
+        const resultado = document.getElementById('resultadoEnvio');
+        const asunto = document.getElementById('asunto').value;
+        const mensaje = document.getElementById('mensaje').value;
+
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Enviando...';
+        resultado.style.display = 'none';
+
+        const formData = new FormData();
+        formData.append('asunto', asunto);
+        formData.append('mensaje', mensaje);
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        fetch('{% url "portal:admin_enviar_avisos_masivos" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = '📧 Enviar a Todos';
+
+                resultado.style.display = 'block';
+
+                if (data.success) {
+                    resultado.style.background = '#d4edda';
+                    resultado.style.color = '#155724';
+                    resultado.innerHTML = `
+                    <strong>✅ ${data.message}</strong>
+                    <br><small>Emails enviados a: ${data.emails.join(', ')}</small>
+                    ${data.sin_correo.length > 0 ? '<br><small style="color:#856404">⚠️ Sin email: ' + data.sin_correo.join(', ') + '</small>' : ''}
+                `;
+                } else {
+                    resultado.style.background = '#f8d7da';
+                    resultado.style.color = '#721c24';
+                    resultado.innerHTML = `<strong>❌ Error:</strong> ${data.error}`;
+                }
+            })
+            .catch(error => {
+                btn.disabled = false;
+                btn.innerHTML = '📧 Enviar a Todos';
+
+                resultado.style.display = 'block';
+                resultado.style.background = '#f8d7da';
+                resultado.style.color = '#721c24';
+                resultado.innerHTML = `<strong>❌ Error de conexión:</strong> ${error.message}`;
+            });
+    }
+</script>
+{% endblock %}

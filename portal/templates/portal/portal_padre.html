@@ -1,0 +1,241 @@
+{% extends 'portal/base.html' %}
+{% load static %}
+
+{% block title %}Portal de Padres{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <h1>
+            <img src="{% static 'portal/img/logo_nuevo_siglo.png' %}" alt="Logo" class="logo"
+                onerror="this.style.display='none'">
+            Sistema de Cobranzas
+        </h1>
+        <div class="header-actions">
+            <span class="user-info">👤 {{ usuario.get_full_name|default:usuario.username }}</span>
+            <a href="{% url 'portal:logout' %}" class="btn btn-outline" style="background:white">Salir</a>
+        </div>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{% if message.tags == 'error' %}error{% else %}{{ message.tags }}{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Total Box -->
+    <div class="total-box">
+        <p>Deuda Total Pendiente</p>
+        <h2>${{ total_adeudado|floatformat:0|default:"0" }}</h2>
+    </div>
+
+    <!-- Datos de Transferencia -->
+    <div class="info-box">
+        <h4>📋 Datos para Transferencia</h4>
+        <div class="form-group">
+            <label>Alias</label>
+            <div class="copy-group">
+                <input type="text" value="{{ config.alias_transferencia }}" readonly id="aliasInput">
+                <button class="btn btn-primary btn-sm" onclick="copyToClipboard('aliasInput')">📋 Copiar</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>CBU</label>
+            <div class="copy-group">
+                <input type="text" value="{{ config.cbu }}" readonly id="cbuInput">
+                <button class="btn btn-primary btn-sm" onclick="copyToClipboard('cbuInput')">📋 Copiar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Alumnos y Deudas -->
+    {% if alumnos %}
+    {% for data in alumnos %}
+    <div class="card">
+        <h3 style="margin-bottom:1rem">📄 {{ data.alumno.nombre_completo }} - {{ data.alumno.curso_completo }}</h3>
+        <p style="color:var(--text-light);margin-bottom:1rem">DNI: {{ data.alumno.documento }}</p>
+
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Concepto</th>
+                        <th>Período</th>
+                        <th>Monto</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for deuda in data.deudas %}
+                    <tr>
+                        <td>{{ deuda.concepto.nombre }}</td>
+                        <td>{{ deuda.periodo|default:"-" }}</td>
+                        <td>${{ deuda.monto|floatformat:0 }}</td>
+                        <td>
+                            {% if deuda.estado == 'pendiente' %}
+                            <span class="badge badge-pending">⏳ Pendiente</span>
+                            {% elif deuda.estado == 'comprobante_enviado' %}
+                            <span class="badge badge-sent">📤 Comprobante Enviado</span>
+                            {% elif deuda.estado == 'pago_verificado' %}
+                            <span class="badge badge-verified">✅ Pago Verificado</span>
+                            {% else %}
+                            <span class="badge">{{ deuda.get_estado_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if deuda.estado == 'pendiente' %}
+                            <button class="btn btn-secondary btn-sm"
+                                onclick="openPaymentModal('{{ deuda.id }}', '{{ deuda.concepto.nombre }}', '{{ deuda.monto }}')">💳
+                                Pagar</button>
+                            {% elif deuda.estado == 'comprobante_enviado' or deuda.estado == 'pago_verificado' %}
+                            {% with pago=deuda.pagos.first %}
+                            {% if pago %}
+                            <a href="{% url 'portal:ver_recibo' pago.id %}" class="btn btn-outline btn-sm">🧾 Ver
+                                Recibo</a>
+                            {% endif %}
+                            {% endwith %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div
+            style="background:var(--bg);padding:1rem;border-radius:8px;margin-top:1rem;display:flex;justify-content:space-between;align-items:center">
+            <span>Subtotal pendiente:</span>
+            <strong style="font-size:1.25rem;color:var(--primary)">${{ data.total|floatformat:0|default:"0" }}</strong>
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="card" style="text-align:center;padding:3rem">
+        <p style="color:var(--text-light)">No se encontraron deudas asociadas a su cuenta.</p>
+        <p style="color:var(--text-light);margin-top:0.5rem">Si cree que esto es un error, comuníquese con
+            administración.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal de Pago -->
+<div id="paymentModal" class="modal-overlay">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>💳 Cargar Comprobante</h2>
+            <button class="close-btn" onclick="closeModal('paymentModal')">×</button>
+        </div>
+        <form method="POST" enctype="multipart/form-data" id="paymentForm">
+            {% csrf_token %}
+            <input type="hidden" id="monto" name="monto">
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <strong id="modalConcepto"></strong><br>
+                    Monto a pagar: <strong id="modalMonto"></strong>
+                </div>
+                <div class="form-group">
+                    <label>Comprobante de Transferencia</label>
+                    <div class="file-upload" onclick="document.getElementById('comprobante').click()">
+                        <input type="file" id="comprobante" name="comprobante" accept="image/*,.pdf"
+                            onchange="previewFile(this, 'filePreview')" required>
+                        <p>📎 Click para seleccionar imagen</p>
+                        <small>JPG, PNG o PDF</small>
+                    </div>
+                    <img id="filePreview" class="img-preview hidden">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeModal('paymentModal')">Cancelar</button>
+                <button type="submit" class="btn btn-primary" id="submitBtn">Enviar Comprobante</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<footer style="text-align: center; padding: 2rem; color: var(--text-light); font-size: 0.875rem;">
+    <p>Created by RenderByte | All Right Reserved</p>
+</footer>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    var currentDeudaId = null;
+
+    function openPaymentModal(deudaId, concepto, monto) {
+        currentDeudaId = deudaId;
+        document.getElementById('paymentForm').action = "{% url 'portal:enviar_comprobante' 0 %}".replace('0', deudaId);
+        document.getElementById('modalConcepto').textContent = concepto;
+        document.getElementById('modalMonto').textContent = '$' + parseFloat(monto).toLocaleString('es-AR');
+        document.getElementById('monto').value = monto;
+        document.getElementById('filePreview').classList.add('hidden');
+        document.getElementById('comprobante').value = '';
+        document.getElementById('submitBtn').disabled = false;
+        document.getElementById('submitBtn').textContent = 'Enviar Comprobante';
+        openModal('paymentModal');
+    }
+
+    document.getElementById('paymentForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        var form = this;
+        var submitBtn = document.getElementById('submitBtn');
+        var formData = new FormData(form);
+
+        // Deshabilitar botón mientras se envía
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Enviando...';
+
+        fetch(form.action, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Cerrar modal
+                    closeModal('paymentModal');
+
+                    // Actualizar el estado en la tabla
+                    var buttons = document.querySelectorAll('button[onclick*="openPaymentModal"]');
+                    buttons.forEach(function (btn) {
+                        if (btn.onclick.toString().includes("'" + currentDeudaId + "'")) {
+                            var row = btn.closest('tr');
+                            if (row) {
+                                // Actualizar la celda de estado
+                                var estadoCell = row.querySelector('td:nth-child(4)');
+                                if (estadoCell) {
+                                    estadoCell.innerHTML = '<span class="badge badge-sent">📤 Pendiente verificación</span>';
+                                }
+                                // Reemplazar botón de pagar por botón de ver recibo
+                                var accionCell = row.querySelector('td:nth-child(5)');
+                                if (accionCell && data.recibo_url) {
+                                    accionCell.innerHTML = '<a href="' + data.recibo_url + '" class="btn btn-outline btn-sm">🧾 Ver Recibo</a>';
+                                }
+                            }
+                        }
+                    });
+
+                    // Mostrar mensaje de éxito
+                    alert('✅ ' + data.message);
+                } else {
+                    alert('❌ ' + (data.error || 'Error al enviar el comprobante'));
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Enviar Comprobante';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('❌ Error de conexión. Intente nuevamente.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Enviar Comprobante';
+            });
+    });
+</script>
+{% endblock %}

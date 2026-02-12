@@ -1,0 +1,79 @@
+{% extends 'portal/admin/base_admin.html' %}
+
+{% block admin_title %}Dashboard{% endblock %}
+
+{% block admin_content %}
+<!-- Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>{{ deudas_count }}</h3>
+        <p>Deudas Cargadas</p>
+    </div>
+    <div class="stat-card">
+        <h3 style="color:var(--warning)">{{ pagos_pendientes }}</h3>
+        <p>Pagos Pendientes</p>
+    </div>
+    <div class="stat-card">
+        <h3 style="color:var(--success)">{{ pagos_verificados }}</h3>
+        <p>Pagos Verificados</p>
+    </div>
+    <div class="stat-card">
+        <h3>${{ total_recaudado|floatformat:0 }}</h3>
+        <p>Total Recaudado</p>
+    </div>
+</div>
+
+<!-- Pagos Pendientes Recientes -->
+{% if pagos_recientes %}
+<div class="card">
+    <h3 style="margin-bottom:1rem">⏳ Pagos Pendientes de Verificación</h3>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nº Operación</th>
+                    <th>Fecha</th>
+                    <th>Alumno</th>
+                    <th>Concepto</th>
+                    <th>Monto</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pago in pagos_recientes %}
+                <tr>
+                    <td><strong>{{ pago.numero_operacion }}</strong></td>
+                    <td>{{ pago.fecha_envio|date:"d/m/Y H:i" }}</td>
+                    <td>{{ pago.deuda.alumno.nombre_completo }}</td>
+                    <td>{{ pago.deuda.concepto.nombre }}</td>
+                    <td>${{ pago.monto_pagado|floatformat:0 }}</td>
+                    <td>
+                        <a href="{% url 'portal:admin_verificar_pago' pago.id %}" class="btn btn-secondary btn-sm">✅
+                            Verificar</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div style="margin-top:1rem">
+        <a href="{% url 'portal:admin_pagos' %}?estado=pendiente" class="btn btn-outline">Ver todos los pagos pendientes
+            →</a>
+    </div>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:3rem">
+    <p style="color:var(--success);font-size:1.25rem">✅ No hay pagos pendientes de verificación</p>
+</div>
+{% endif %}
+
+<!-- Quick Actions -->
+<div class="card">
+    <h3 style="margin-bottom:1rem">⚡ Acciones Rápidas</h3>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap">
+        <a href="{% url 'portal:admin_importar' %}" class="btn btn-primary">📥 Importar Deudas</a>
+        <a href="{% url 'portal:admin_exportar' %}" class="btn btn-outline">📤 Exportar Pagos</a>
+        <a href="{% url 'portal:admin_avisos' %}" class="btn btn-warning">📧 Enviar Avisos</a>
+    </div>
+</div>
+{% endblock %}
