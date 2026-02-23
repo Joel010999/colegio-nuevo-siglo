@@ -62,10 +62,10 @@
 
         <select name="estado" onchange="this.form.submit()" style="flex:1;min-width:200px">
             <option value="">Todos los cursos</option>
-            <option value="pendiente" {% if estado_filter=='pendiente' %}selected{% endif %}>Pendiente</option>
-            <option value="comprobante_enviado" {% if estado_filter=='comprobante_enviado' %}selected{% endif %}>
+            <option value="pendiente" {% if estado_filter == 'pendiente' %}selected{% endif %}>Pendiente</option>
+            <option value="comprobante_enviado" {% if estado_filter == 'comprobante_enviado' %}selected{% endif %}>
                 Comprobante Enviado</option>
-            <option value="pago_verificado" {% if estado_filter=='pago_verificado' %}selected{% endif %}>Pago Verificado
+            <option value="pago_verificado" {% if estado_filter == 'pago_verificado' %}selected{% endif %}>Pago Verificado
             </option>
         </select>
 

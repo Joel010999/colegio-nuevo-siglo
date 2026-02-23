@@ -30,9 +30,9 @@
     <form method="GET" class="filters">
         <select name="estado" onchange="this.form.submit()">
             <option value="">Todos</option>
-            <option value="pendiente" {% if estado_filter=='pendiente' %}selected{% endif %}>Pendiente Verificación
+            <option value="pendiente" {% if estado_filter == 'pendiente' %}selected{% endif %}>Pendiente Verificación
             </option>
-            <option value="verificado" {% if estado_filter=='verificado' %}selected{% endif %}>Pago Verificado</option>
+            <option value="verificado" {% if estado_filter == 'verificado' %}selected{% endif %}>Pago Verificado</option>
         </select>
     </form>
 
