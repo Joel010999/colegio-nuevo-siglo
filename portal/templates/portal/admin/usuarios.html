@@ -51,14 +51,13 @@
                         </td>
                         <td style="display:flex;gap:0.5rem">
                             {% if u.perfil %}
-                            <a href="{% url 'portal:admin_reset_password' u.perfil.id %}" class="btn btn-sm btn-outline"
-                                onclick="return confirm('¿Resetear contraseña a la genérica?')"
+                            <button class="btn btn-sm btn-outline"
+                                onclick="abrirModalResetPassword('{% url \'portal:admin_reset_password\' u.perfil.id %}')"
                                 title="Resetear contraseña"
-                                style="background:var(--warning);border-color:var(--warning);color:white;">🔄</a>
-                            <a href="#" class="btn btn-sm"
-                                onclick="forzarCambioPassword('{{ u.perfil.id }}'); return false;"
+                                style="background:var(--warning);border-color:var(--warning);color:white;">🔄</button>
+                            <button class="btn btn-sm" onclick="abrirModalForzarCambio('{{ u.perfil.id }}')"
                                 title="Forzar cambio de contraseña"
-                                style="background:#e67e22;border-color:#e67e22;color:white;">🔒</a>
+                                style="background:#e67e22;border-color:#e67e22;color:white;">🔒</button>
                             {% else %}
                             <span style="color:var(--text-light);font-size:0.8rem">Sin usuario</span>
                             {% endif %}
@@ -76,30 +75,80 @@
     </div>
     {% endfor %}
 </div>
+<!-- Modal Reset Password -->
+<div id="modalResetPassword" class="modal-overlay">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>⚠️ Resetear Contraseña</h2>
+            <button class="close-btn" onclick="closeModal('modalResetPassword')">×</button>
+        </div>
+        <div class="modal-body">
+            <p>¿Está seguro de que desea resetear la contraseña de este usuario a la genérica (Colegio123)?</p>
+        </div>
+        <div class="modal-footer"
+            style="padding:1.5rem; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:0.5rem;">
+            <button class="btn btn-outline" onclick="closeModal('modalResetPassword')">Cancelar</button>
+            <a id="btnConfirmReset" href="#" class="btn btn-warning">Sí, Resetear</a>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Forzar Cambio -->
+<div id="modalForzarCambio" class="modal-overlay">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>🔒 Forzar Cambio de Contraseña</h2>
+            <button class="close-btn" onclick="closeModal('modalForzarCambio')">×</button>
+        </div>
+        <div class="modal-body">
+            <p>¿Forzar a este usuario a cambiar su contraseña en el próximo inicio de sesión?</p>
+        </div>
+        <div class="modal-footer"
+            style="padding:1.5rem; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:0.5rem;">
+            <button class="btn btn-outline" onclick="closeModal('modalForzarCambio')">Cancelar</button>
+            <button class="btn" style="background:#e67e22;color:white;" onclick="confirmarForzarCambio()">Sí, Forzar
+                Cambio</button>
+        </div>
+    </div>
+</div>
 
 <script>
-    function forzarCambioPassword(perfilId) {
-        if (confirm('¿Forzar a este usuario a cambiar su contraseña en el próximo inicio de sesión?')) {
-            fetch('/admin-panel/forzar-cambio-password/' + perfilId + '/', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}',
-                    'Content-Type': 'application/json'
+    function abrirModalResetPassword(url) {
+        document.getElementById('btnConfirmReset').href = url;
+        openModal('modalResetPassword');
+    }
+
+    let perfilIdToForce = null;
+    function abrirModalForzarCambio(perfilId) {
+        perfilIdToForce = perfilId;
+        openModal('modalForzarCambio');
+    }
+
+    function confirmarForzarCambio() {
+        if (!perfilIdToForce) return;
+
+        closeModal('modalForzarCambio');
+        showAlert('⏳ Procesando solicitud...', 'info');
+
+        fetch('/admin-panel/forzar-cambio-password/' + perfilIdToForce + '/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    showAlert('✅ Se marcó al usuario para cambiar contraseña', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showAlert('❌ Error: ' + data.error, 'error');
                 }
             })
-                .then(function (response) { return response.json(); })
-                .then(function (data) {
-                    if (data.success) {
-                        alert('Se marcó al usuario para cambiar contraseña');
-                        location.reload();
-                    } else {
-                        alert('Error: ' + data.error);
-                    }
-                })
-                .catch(function (error) {
-                    alert('Error al procesar la solicitud');
-                });
-        }
+            .catch(function (error) {
+                showAlert('❌ Error al procesar la solicitud', 'error');
+            });
     }
 
     function abrirModalCrearUsuario() {
@@ -136,16 +185,17 @@
             .then(function (response) { return response.json(); })
             .then(function (data) {
                 if (data.success) {
-                    alert('Usuario creado exitosamente.\nUsuario: ' + data.dni + '\nContraseña: ' + data.password_default);
-                    location.reload();
+                    cerrarModalCrearUsuario();
+                    showAlert(`✅ Usuario creado exitosamente.<br><b>Usuario:</b> ${data.dni}<br><b>Contraseña:</b> ${data.password_default}`, 'success');
+                    setTimeout(() => location.reload(), 3000);
                 } else {
-                    alert('Error: ' + data.error);
+                    showAlert('❌ Error: ' + data.error, 'error');
                     btnGuardar.disabled = false;
                     btnGuardar.textContent = 'Guardar';
                 }
             })
             .catch(function (error) {
-                alert('Error al procesar la solicitud');
+                showAlert('❌ Error al procesar la solicitud', 'error');
                 btnGuardar.disabled = false;
                 btnGuardar.textContent = 'Guardar';
             });

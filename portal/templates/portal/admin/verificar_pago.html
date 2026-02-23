@@ -75,16 +75,36 @@
             <input type="hidden" name="accion" value="verificar">
             <button type="submit" class="btn btn-success">✅ Verificar Pago</button>
         </form>
-        <form method="POST" style="display:inline" onsubmit="return confirm('¿Está seguro de rechazar este pago?')">
-            {% csrf_token %}
-            <input type="hidden" name="accion" value="rechazar">
-            <button type="submit" class="btn btn-danger">❌ Rechazar</button>
-        </form>
+        <button type="button" class="btn btn-danger" onclick="openModal('modalRechazar')">❌ Rechazar</button>
     </div>
     {% endif %}
 
     <div style="margin-top:2rem">
         <a href="{% url 'portal:admin_pagos' %}" class="btn btn-outline">← Volver a Pagos</a>
+    </div>
+</div>
+
+<!-- Modal Confirmar Rechazo -->
+<div id="modalRechazar" class="modal-overlay">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>⚠️ Confirmar Rechazo</h2>
+            <button class="close-btn" onclick="closeModal('modalRechazar')">×</button>
+        </div>
+        <div class="modal-body">
+            <p>¿Está seguro de que desea rechazar este pago?</p>
+            <p style="color:var(--text-light);margin-top:0.5rem">El estado de la deuda volverá a "Pendiente" y el padre
+                deberá subir un nuevo comprobante.</p>
+        </div>
+        <div class="modal-footer"
+            style="padding:1.5rem; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:0.5rem;">
+            <button class="btn btn-outline" onclick="closeModal('modalRechazar')">Cancelar</button>
+            <form method="POST" style="display:inline">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="rechazar">
+                <button type="submit" class="btn btn-danger">Sí, Rechazar</button>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}
