@@ -27,9 +27,17 @@ SECRET_KEY = 'django-insecure-n#87q_xcmk0h-j(a+g0ufk+7gka1av74z@bk*be6rt75=4b3b%
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    'pagos.colegionuevosiglo.edu.ar',
+    'colegio-nuevo-siglo-production.up.railway.app',
+    'localhost',
+    '127.0.0.1'
+]
 
-
+CSRF_TRUSTED_ORIGINS = [
+    'https://pagos.colegionuevosiglo.edu.ar',
+    'https://colegio-nuevo-siglo-production.up.railway.app'
+]
 # Application definition
 
 INSTALLED_APPS = [
