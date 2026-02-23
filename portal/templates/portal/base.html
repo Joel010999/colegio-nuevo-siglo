@@ -256,6 +256,9 @@
 
         .table-responsive {
             overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border-radius: 8px;
+            box-shadow: 0 0 0 1px var(--border);
         }
 
         .total-box {
@@ -325,7 +328,25 @@
             display: flex;
             gap: 0.5rem;
             margin-bottom: 1.5rem;
-            flex-wrap: wrap;
+            overflow-x: auto;
+            flex-wrap: nowrap;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 5px;
+            /* space for scrollbar */
+        }
+
+        /* Hide scrollbar for tabs */
+        .tabs::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .tabs::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .tabs::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
         }
 
         .tab {
@@ -338,6 +359,7 @@
             transition: all 0.2s;
             text-decoration: none;
             color: var(--text);
+            white-space: nowrap;
         }
 
         .tab.active {
@@ -438,22 +460,34 @@
             margin-bottom: 1rem;
         }
 
+        .filters select,
+        .filters input {
+            width: 100%;
+        }
+
         @media (max-width: 768px) {
             .header {
                 flex-direction: column;
                 text-align: center;
+                padding: 1rem;
             }
 
             .header-actions {
                 width: 100%;
                 justify-content: center;
+                flex-wrap: wrap;
             }
 
             .total-box h2 {
                 font-size: 2rem;
             }
 
-            .btn {
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            /* Solo hacemos 100% de ancho los botones específicamente marcados */
+            .btn-block-mobile {
                 width: 100%;
                 justify-content: center;
             }
@@ -462,6 +496,12 @@
             td {
                 padding: 0.5rem;
                 font-size: 0.875rem;
+                white-space: nowrap;
+            }
+
+            .filters {
+                display: flex;
+                flex-direction: column;
             }
         }
     </style>

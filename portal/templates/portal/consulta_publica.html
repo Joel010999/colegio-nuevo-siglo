@@ -18,14 +18,13 @@
 
     <!-- Formulario de búsqueda -->
     <div class="card">
-        <form method="GET" action="{% url 'portal:consulta_publica' %}"
-            style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
-            <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+        <form method="GET" action="{% url 'portal:consulta_publica' %}" class="filters" style="align-items:flex-end;">
+            <div class="form-group" style="margin-bottom:0">
                 <label for="dni">🔍 Ingrese DNI del Alumno o Responsable</label>
                 <input type="text" id="dni" name="dni" placeholder="Ej: 12345678" value="{{ dni_buscado }}"
                     pattern="[0-9]+" title="Ingrese solo números" required>
             </div>
-            <button type="submit" class="btn btn-primary">Consultar</button>
+            <button type="submit" class="btn btn-primary btn-block-mobile">Consultar</button>
         </form>
     </div>
 
