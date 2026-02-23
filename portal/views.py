@@ -420,7 +420,7 @@ def admin_pagos(request):
         'total_recaudado': total_recaudado,
     }
     
-    return render(request, 'portal/admin/pagos.html', context)
+    return render(request, 'portal/admin/pagos_fixed.html', context)
 
 
 @login_required

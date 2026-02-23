@@ -1,0 +1,110 @@
+{% extends 'portal/admin/base_admin.html' %}
+
+{% block admin_title %}Pagos{% endblock %}
+
+{% block admin_content %}
+<!-- Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>{{ deudas_count }}</h3>
+        <p>Deudas Cargadas</p>
+    </div>
+    <div class="stat-card">
+        <h3 style="color:var(--warning)">{{ pagos_pendientes }}</h3>
+        <p>Pagos Pendientes</p>
+    </div>
+    <div class="stat-card">
+        <h3 style="color:var(--success)">{{ pagos_verificados }}</h3>
+        <p>Pagos Verificados</p>
+    </div>
+    <div class="stat-card">
+        <h3>${{ total_recaudado|floatformat:0 }}</h3>
+        <p>Total Recaudado</p>
+    </div>
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom:1rem">💳 Pagos Registrados</h3>
+
+    <!-- Filtros -->
+    <form method="GET" class="filters">
+        <select name="estado" onchange="this.form.submit()">
+            <option value="">Todos</option>
+            <option value="pendiente" {% if estado_filter=='pendiente' %}selected{% endif %}>Pendiente Verificación
+            </option>
+            <option value="verificado" {% if estado_filter=='verificado' %}selected{% endif %}>Pago Verificado</option>
+        </select>
+    </form>
+
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nº Recibo</th>
+                    <th>Fecha</th>
+                    <th>Alumno</th>
+                    <th>Concepto</th>
+                    <th>Monto</th>
+                    <th>Responsable</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pago in pagos %}
+                <tr>
+                    <td><strong>{{ pago.numero_operacion }}</strong></td>
+                    <td>{{ pago.fecha_envio|date:"d/m/Y" }}</td>
+                    <td>{{ pago.deuda.alumno.nombre_completo }}</td>
+                    <td>{{ pago.deuda.concepto.nombre }}</td>
+                    <td>${{ pago.monto_pagado|floatformat:0 }}</td>
+                    <td>{{ pago.usuario_responsable.get_full_name|default:pago.usuario_responsable.username }}</td>
+                    <td>
+                        {% if pago.estado == 'pendiente' %}
+                        <span class="badge badge-sent">⏳ Pendiente</span>
+                        {% elif pago.estado == 'verificado' %}
+                        <span class="badge badge-verified">✅ Verificado</span>
+                        {% else %}
+                        <span class="badge badge-danger">❌ Rechazado</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'portal:admin_verificar_pago' pago.id %}" class="btn btn-sm btn-outline"
+                            title="Ver detalle">👁️</a>
+                        {% if pago.comprobante %}
+                        <a href="{{ pago.comprobante.url }}" class="btn btn-sm btn-outline" target="_blank"
+                            title="Ver comprobante">📥</a>
+                        {% endif %}
+                        {% if pago.estado == 'pendiente' %}
+                        <a href="{% url 'portal:admin_verificar_pago' pago.id %}" class="btn btn-sm btn-secondary"
+                            title="Verificar">✅</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" style="text-align:center;padding:2rem;color:var(--text-light)">
+                        No se encontraron pagos
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Paginación -->
+    {% if pagos.has_other_pages %}
+    <div style="display:flex;justify-content:center;gap:0.5rem;margin-top:1rem">
+        {% if pagos.has_previous %}
+        <a href="?page={{ pagos.previous_page_number }}&estado={{ estado_filter }}" class="btn btn-outline btn-sm">←
+            Anterior</a>
+        {% endif %}
+        <span style="padding:0.5rem 1rem">Página {{ pagos.number }} de {{ pagos.paginator.num_pages }}</span>
+        {% if pagos.has_next %}
+        <a href="?page={{ pagos.next_page_number }}&estado={{ estado_filter }}" class="btn btn-outline btn-sm">Siguiente
+            →</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
