@@ -52,7 +52,8 @@
                         <td style="display:flex;gap:0.5rem">
                             {% if u.perfil %}
                             <button class="btn btn-sm btn-outline"
-                                onclick="abrirModalResetPassword('{% url \'portal:admin_reset_password\' u.perfil.id %}')"
+                                data-url="{% url 'portal:admin_reset_password' u.perfil.id %}"
+                                onclick="abrirModalResetPassword(this.getAttribute('data-url'))"
                                 title="Resetear contraseña"
                                 style="background:var(--warning);border-color:var(--warning);color:white;">🔄</button>
                             <button class="btn btn-sm" onclick="abrirModalForzarCambio('{{ u.perfil.id }}')"
