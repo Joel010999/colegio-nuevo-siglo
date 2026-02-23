@@ -118,8 +118,38 @@ def primer_login_view(request):
         request.user.save()
         
         # Actualizar perfil
-        request.user.perfil.must_change_password = False
-        request.user.perfil.save()
+        if hasattr(request.user, 'perfil'):
+            request.user.perfil.must_change_password = False
+            request.user.perfil.save()
+            
+            # Actualizar email de alumnos vinculados a este DNI
+            if request.user.perfil.dni:
+                alumnos_vinculados = Alumno.objects.filter(
+                    Q(padre_dni=request.user.perfil.dni) |
+                    Q(madre_dni=request.user.perfil.dni) |
+                    Q(tutor_dni=request.user.perfil.dni)
+                )
+                
+                for alumno in alumnos_vinculados:
+                    modificado = False
+                    if alumno.padre_dni == request.user.perfil.dni:
+                        alumno.padre_email = email
+                        modificado = True
+                    if alumno.madre_dni == request.user.perfil.dni:
+                        alumno.madre_email = email
+                        modificado = True
+                    if alumno.tutor_dni == request.user.perfil.dni:
+                        alumno.tutor_email = email
+                        modificado = True
+                    
+                    # Si no estaba registrado como tutor explícitamente pero el DNI del alumno
+                    # coincide con el DNI del usuario logueado (caso alumnos mayores)
+                    if not modificado and alumno.documento == request.user.perfil.dni:
+                        alumno.email = email
+                        modificado = True
+                        
+                    if modificado:
+                        alumno.save()
         
         RegistroAuditoria.log(request.user, 'PASSWORD_CHANGED', 'Primer ingreso completado', request)
         
@@ -310,9 +340,10 @@ def admin_deudas(request):
     
     # Obtener opciones para los filtros
     # Niveles
-    niveles_db = Alumno.objects.values_list('nivel', flat=True).distinct().order_by('nivel')
     niveles_map = {'I4': 'Inicial 4', 'I5': 'Inicial 5', 'P': 'Primario', 'S': 'Secundario'}
-    niveles = [{'val': n, 'label': niveles_map.get(n, n), 'selected': n == nivel_filter} for n in niveles_db if n]
+    niveles_db = set(Alumno.objects.values_list('nivel', flat=True).distinct())
+    niveles_ordenados = ['I4', 'I5', 'P', 'S'] + sorted([n for n in niveles_db if n and n not in niveles_map])
+    niveles = [{'val': n, 'label': niveles_map.get(n, n), 'selected': n == nivel_filter} for n in niveles_ordenados]
     
     # Cursos
     cursos_db = Alumno.objects.values_list('curso', flat=True).distinct().order_by('curso')
@@ -442,10 +473,14 @@ def admin_usuarios(request):
             alumnos_por_curso[curso] = []
         
         # Buscar si tiene usuario asociado
-        perfil = PerfilUsuario.objects.filter(dni=alumno.documento).first()
+        perfil = PerfilUsuario.objects.select_related('usuario').filter(dni=alumno.documento).first()
         
-        # Obtener email del tutor/responsable
-        email_responsable = alumno.tutor_email or alumno.madre_email or alumno.padre_email or alumno.email or ''
+        # Obtener email: Primero del usuario si existe, luego del tutor/responsable
+        email_responsable = ''
+        if perfil and perfil.usuario.email:
+            email_responsable = perfil.usuario.email
+        else:
+            email_responsable = alumno.tutor_email or alumno.padre_email or alumno.madre_email or alumno.email or ''
         
         alumnos_por_curso[curso].append({
             'alumno': alumno,
@@ -615,7 +650,13 @@ def admin_avisos(request):
     
     for alumno in alumnos_con_deuda:
         # Buscar email del responsable
-        email = alumno.padre_email or alumno.madre_email or alumno.tutor_email or alumno.email
+        perfil = PerfilUsuario.objects.select_related('usuario').filter(dni=alumno.documento).first()
+        email = ''
+        if perfil and perfil.usuario.email:
+            email = perfil.usuario.email
+        else:
+            email = alumno.padre_email or alumno.madre_email or alumno.tutor_email or alumno.email
+        
         morosos.append({
             'alumno': alumno,
             'email': email,
@@ -661,7 +702,12 @@ def admin_enviar_avisos_masivos(request):
     from_email = getattr(django_settings, 'DEFAULT_FROM_EMAIL', 'cobranzasns@colegionuevosiglo.edu.ar')
     
     for alumno in alumnos_con_deuda:
-        email = alumno.padre_email or alumno.madre_email or alumno.tutor_email or alumno.email
+        perfil = PerfilUsuario.objects.select_related('usuario').filter(dni=alumno.documento).first()
+        email = ''
+        if perfil and perfil.usuario.email:
+            email = perfil.usuario.email
+        else:
+            email = alumno.padre_email or alumno.madre_email or alumno.tutor_email or alumno.email
         
         if email:
             # Personalizar mensaje con datos del alumno
@@ -1455,11 +1501,30 @@ def admin_config(request):
 @admin_required
 def admin_auditoria(request):
     """Log de auditoría."""
-    registros = RegistroAuditoria.objects.select_related('usuario').all()[:200]
+    from datetime import datetime
+    
+    fecha = request.GET.get('fecha', '')
+    usuario = request.GET.get('usuario', '')
+
+    registros = RegistroAuditoria.objects.select_related('usuario').all()
+    
+    if fecha:
+        try:
+            dt = datetime.strptime(fecha, '%Y-%m-%d')
+            registros = registros.filter(timestamp__date=dt.date())
+        except ValueError:
+            pass
+            
+    if usuario:
+        registros = registros.filter(usuario__username__icontains=usuario)
+
+    registros = registros[:200]
     
     context = {
         'registros': registros,
         'active_tab': 'auditoria',
+        'filtro_fecha': fecha,
+        'filtro_usuario': usuario,
     }
     
     return render(request, 'portal/admin/auditoria.html', context)

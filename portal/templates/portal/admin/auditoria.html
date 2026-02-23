@@ -4,7 +4,32 @@
 
 {% block admin_content %}
 <div class="card">
-    <h3 style="margin-bottom:1rem">📜 Log de Auditoría</h3>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+        <h3 style="margin:0">📜 Log de Auditoría</h3>
+    </div>
+
+    <!-- Filtros -->
+    <div style="background:#f8f9fa; padding:1rem; border-radius:8px; margin-bottom:1.5rem;">
+        <form method="get" style="display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
+            <div class="form-group" style="margin:0; flex-grow:1; max-width:200px;">
+                <label style="display:block; margin-bottom:0.5rem; font-weight:600; font-size:0.9rem;">Fecha</label>
+                <input type="date" name="fecha" value="{{ filtro_fecha }}"
+                    style="width:100%; padding:0.6rem; border:1px solid #ddd; border-radius:6px;">
+            </div>
+
+            <div class="form-group" style="margin:0; flex-grow:1; max-width:250px;">
+                <label style="display:block; margin-bottom:0.5rem; font-weight:600; font-size:0.9rem;">Usuario</label>
+                <input type="text" name="usuario" value="{{ filtro_usuario }}" placeholder="Buscar por usuario..."
+                    style="width:100%; padding:0.6rem; border:1px solid #ddd; border-radius:6px;">
+            </div>
+
+            <div style="display:flex; gap:0.5rem;">
+                <button type="submit" class="btn btn-primary" style="padding:0.6rem 1.5rem;">🔍 Filtrar</button>
+                <a href="{% url 'portal:admin_auditoria' %}" class="btn btn-outline"
+                    style="padding:0.6rem 1.5rem; background:#fff;">Limpiar</a>
+            </div>
+        </form>
+    </div>
 
     <div class="table-responsive">
         <table>

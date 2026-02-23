@@ -8,7 +8,7 @@
     <!-- Send all button -->
     <div style="margin-bottom:1.5rem; display:flex; gap:1rem;">
         <button class="btn btn-primary" onclick="abrirModalMasivo()">
-            📧 AVISO DE CUOTA A PAGAR
+            📧 AVISO DE DEUDA
         </button>
         <button class="btn btn-primary" onclick="abrirModalPagoVencer()">
             📅 PAGO A VENCER
@@ -181,7 +181,7 @@ Colegio Nuevo Siglo</textarea>
     function abrirModalMasivo() {
         document.getElementById('modalMasivo').style.display = 'flex';
         document.getElementById('resultadoEnvio').style.display = 'none';
-        document.getElementById('modalTitle').innerText = '📧 AVISO DE CUOTA A PAGAR';
+        document.getElementById('modalTitle').innerText = '📧 AVISO DE DEUDA';
 
         // Show variables info for this mode
         document.getElementById('variablesInfo').style.display = 'block';

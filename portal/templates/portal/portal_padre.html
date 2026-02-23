@@ -63,7 +63,6 @@
                 <thead>
                     <tr>
                         <th>Concepto</th>
-                        <th>Período</th>
                         <th>Monto</th>
                         <th>Estado</th>
                         <th>Acciones</th>
@@ -73,7 +72,6 @@
                     {% for deuda in data.deudas %}
                     <tr>
                         <td>{{ deuda.concepto.nombre }}</td>
-                        <td>{{ deuda.periodo|default:"-" }}</td>
                         <td>${{ deuda.monto|floatformat:0 }}</td>
                         <td>
                             {% if deuda.estado == 'pendiente' %}
@@ -157,7 +155,8 @@
 </div>
 
 <footer style="text-align: center; padding: 2rem; color: var(--text-light); font-size: 0.875rem;">
-    <p>Created by RenderByte | All Right Reserved</p>
+    <p><a href="https://renderbyte.net" target="_blank" style="color: inherit; text-decoration: none;">RenderByte |
+            Todos los derechos Reservados.</a></p>
 </footer>
 {% endblock %}
 
