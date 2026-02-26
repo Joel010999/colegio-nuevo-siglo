@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'anymail',  # django-anymail para Resend API
     'portal',  # App del portal de padres
 ]
 
@@ -146,21 +147,23 @@ LOGOUT_REDIRECT_URL = 'portal:login'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Email Configuration - Gmail SMTP
-# Alterna entre consola (localhost) y SMTP real (producción) según EMAIL_TEST_MODE
+# ==================== Email Configuration ====================
+# Alterna entre consola (localhost) y Resend API (producción) según EMAIL_TEST_MODE
 EMAIL_TEST_MODE = os.environ.get('EMAIL_TEST_MODE', 'True').lower() in ('true', '1', 'yes')
 
 if EMAIL_TEST_MODE:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_BACKEND = 'anymail.backends.resend.EmailBackend'
 
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', f'Colegio Nuevo Siglo <{EMAIL_HOST_USER}>')
+ANYMAIL = {
+    'RESEND_API_KEY': os.environ.get('RESEND_API_KEY'),
+}
+
+DEFAULT_FROM_EMAIL = os.environ.get(
+    'DEFAULT_FROM_EMAIL',
+    'Colegio Nuevo Siglo <cobranzasns@colegionuevosiglo.edu.ar>'
+)
 
 # Static files configuration for production
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')

@@ -1,10 +1,11 @@
 """
 email_services.py — Servicio de envío masivo de emails con batching.
 
-Diseñado para enviar hasta 700+ emails sin que Gmail bloquee la cuenta.
+Diseñado para enviar hasta 700+ emails sin que Gmail/Resend bloquee la cuenta.
 Divide los destinatarios en tandas de 50, con pausas entre tandas.
 Incluye ejecución en hilo separado para no trabar el servidor de Railway.
 
+Usa django-anymail (Resend API) en producción — sin SMTP.
 Logs detallados para diagnóstico en producción (Railway).
 """
 
@@ -12,7 +13,6 @@ import os
 import time
 import threading
 import traceback
-import smtplib
 import logging
 from django.core.mail import send_mail
 from django.conf import settings
@@ -75,7 +75,7 @@ def enviar_emails_masivos(
     delay=10,
 ):
     """
-    Envía emails en tandas para evitar bloqueos de Gmail.
+    Envía emails en tandas para evitar rate-limits de Resend/Gmail.
 
     Args:
         destinatarios: Lista de direcciones de email.
@@ -91,6 +91,13 @@ def enviar_emails_masivos(
             - "fallidos": list — lista de dicts {"email": str, "error": str}.
             - "total": int — total de destinatarios.
     """
+    # Importar excepciones de anymail (solo si están disponibles)
+    try:
+        from anymail.exceptions import AnymailAPIError, AnymailRequestsAPIError
+    except ImportError:
+        AnymailAPIError = None
+        AnymailRequestsAPIError = None
+
     enviados = 0
     fallidos = []
     total = len(destinatarios)
@@ -102,7 +109,7 @@ def enviar_emails_masivos(
     ]
 
     total_tandas = len(tandas)
-    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', settings.EMAIL_HOST_USER)
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'cobranzasns@colegionuevosiglo.edu.ar')
 
     logger.info(
         f"[EMAIL_BATCH] Iniciando envío masivo: {total} destinatarios, "
@@ -125,42 +132,44 @@ def enviar_emails_masivos(
                 enviados += 1
                 logger.debug(f"[EMAIL_BATCH]   ✓ Enviado a {email_dest}")
 
-            except smtplib.SMTPAuthenticationError as e:
-                error_msg = str(e)
-                fallidos.append({"email": email_dest, "error": error_msg})
-                logger.critical(
-                    "[EMAIL_BATCH] ERROR CRÍTICO: Error de autenticación SMTP. "
-                    "Revisar la App Password en Railway. "
-                    f"Detalle: {error_msg}"
-                )
-                # Si la autenticación falla, no tiene sentido seguir intentando
-                logger.critical(
-                    f"[EMAIL_BATCH] Abortando envío: {enviados}/{total} enviados "
-                    f"antes del error de autenticación."
-                )
-                return {
-                    "enviados": enviados,
-                    "fallidos": fallidos,
-                    "total": total,
-                    "abortado": True,
-                    "razon": "SMTP_AUTH_ERROR",
-                }
-
-            except smtplib.SMTPException as e:
-                error_msg = str(e)
-                fallidos.append({"email": email_dest, "error": error_msg})
-                logger.error(
-                    f"[EMAIL_BATCH]   ✗ Error SMTP enviando a {email_dest}: {error_msg}\n"
-                    f"{traceback.format_exc()}"
-                )
-
             except Exception as e:
                 error_msg = str(e)
-                fallidos.append({"email": email_dest, "error": error_msg})
-                logger.error(
-                    f"[EMAIL_BATCH]   ✗ Error inesperado enviando a {email_dest}: {error_msg}\n"
-                    f"{traceback.format_exc()}"
-                )
+                error_type = type(e).__name__
+
+                # Detectar errores de autenticación de Resend (API key inválida)
+                if AnymailAPIError and isinstance(e, AnymailAPIError):
+                    if '401' in error_msg or 'unauthorized' in error_msg.lower() or 'invalid api key' in error_msg.lower():
+                        fallidos.append({"email": email_dest, "error": error_msg})
+                        logger.critical(
+                            "[EMAIL_BATCH] ERROR CRÍTICO: Error de autenticación con Resend API. "
+                            "Revisar la RESEND_API_KEY en las variables de entorno de Railway. "
+                            f"Detalle: {error_msg}"
+                        )
+                        logger.critical(
+                            f"[EMAIL_BATCH] Abortando envío: {enviados}/{total} enviados "
+                            f"antes del error de autenticación."
+                        )
+                        return {
+                            "enviados": enviados,
+                            "fallidos": fallidos,
+                            "total": total,
+                            "abortado": True,
+                            "razon": "RESEND_AUTH_ERROR",
+                        }
+
+                    # Otros errores de la API de Resend (rate limit, bad request, etc.)
+                    fallidos.append({"email": email_dest, "error": error_msg})
+                    logger.error(
+                        f"[EMAIL_BATCH]   ✗ Error de Resend API enviando a {email_dest} "
+                        f"({error_type}): {error_msg}\n{traceback.format_exc()}"
+                    )
+                else:
+                    # Error genérico (timeout, conexión, etc.)
+                    fallidos.append({"email": email_dest, "error": error_msg})
+                    logger.error(
+                        f"[EMAIL_BATCH]   ✗ Error inesperado enviando a {email_dest} "
+                        f"({error_type}): {error_msg}\n{traceback.format_exc()}"
+                    )
 
         # Pausa entre tandas (no pausar después de la última)
         if idx < total_tandas:
@@ -209,15 +218,15 @@ def enviar_emails_masivos_async(
         None (el resultado se loguea desde el hilo).
     """
 
-    # Validar que EMAIL_HOST_PASSWORD esté configurado antes de lanzar el hilo
-    email_password = os.environ.get('EMAIL_HOST_PASSWORD')
+    # Validar que RESEND_API_KEY esté configurada antes de lanzar el hilo
     email_test_mode = getattr(settings, 'EMAIL_TEST_MODE', True)
+    resend_api_key = os.environ.get('RESEND_API_KEY')
 
-    if not email_test_mode and not email_password:
+    if not email_test_mode and not resend_api_key:
         logger.critical(
-            "[EMAIL_THREAD] ERROR CRÍTICO: EMAIL_HOST_PASSWORD no está configurada "
-            "en las variables de entorno. No se puede enviar por SMTP real. "
-            "Configurar la App Password en Railway."
+            "[EMAIL_THREAD] ERROR CRÍTICO: RESEND_API_KEY no está configurada "
+            "en las variables de entorno. No se puede enviar por Resend API. "
+            "Configurar la API Key en Railway."
         )
         return
 
@@ -225,7 +234,7 @@ def enviar_emails_masivos_async(
         logger.info(
             f"[EMAIL_THREAD] ▶ Hilo de envío masivo INICIADO. "
             f"{len(destinatarios)} destinatarios, modo: "
-            f"{'CONSOLA (test)' if email_test_mode else 'SMTP REAL'}."
+            f"{'CONSOLA (test)' if email_test_mode else 'RESEND API (producción)'}."
         )
 
         try:
@@ -261,29 +270,11 @@ def enviar_emails_masivos_async(
                 f"Resultado: {resultado['enviados']}/{resultado['total']} enviados."
             )
 
-        except smtplib.SMTPAuthenticationError as e:
-            logger.critical(
-                "[EMAIL_THREAD] ERROR CRÍTICO: Error de autenticación SMTP. "
-                "Revisar la App Password en Railway. "
-                f"Detalle: {e}\n{traceback.format_exc()}"
-            )
-
-        except smtplib.SMTPException as e:
-            logger.critical(
-                f"[EMAIL_THREAD] ERROR SMTP no recuperable: {e}\n"
-                f"{traceback.format_exc()}"
-            )
-
-        except ConnectionError as e:
-            logger.critical(
-                f"[EMAIL_THREAD] ERROR DE CONEXIÓN (timeout/red): {e}\n"
-                f"{traceback.format_exc()}"
-            )
-
         except Exception as e:
+            error_type = type(e).__name__
             logger.critical(
-                f"[EMAIL_THREAD] ERROR FATAL NO ESPERADO en hilo de envío masivo: {e}\n"
-                f"{traceback.format_exc()}"
+                f"[EMAIL_THREAD] ERROR FATAL NO ESPERADO en hilo de envío masivo "
+                f"({error_type}): {e}\n{traceback.format_exc()}"
             )
 
     hilo = threading.Thread(target=_worker, daemon=True, name="email_masivo_thread")
