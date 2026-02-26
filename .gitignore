@@ -1,0 +1,32 @@
+# ============================================
+# .gitignore — Colegio Nuevo Siglo
+# ============================================
+
+# Variables de entorno (NUNCA subir a Git)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Django
+db.sqlite3
+media/
+staticfiles/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
