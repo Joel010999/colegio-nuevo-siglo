@@ -79,13 +79,8 @@
         </p>
 
         <div id="variablesInfo"
-            style="background:#e8f4fd;border-radius:8px;padding:1rem;margin-bottom:1.5rem;border-left:4px solid #2196F3;">
-            <strong style="color:#1976D2">💡 Variables disponibles:</strong>
-            <ul style="margin:0.5rem 0 0 1rem;color:#1976D2;font-size:0.9rem;">
-                <li><code>{alumno}</code> - Nombre del alumno</li>
-                <li><code>{deuda}</code> - Monto de la deuda</li>
-                <li><code>{curso}</code> - Curso del alumno</li>
-            </ul>
+            style="background:#e8f4fd;border-radius:8px;padding:1rem;margin-bottom:1.5rem;border-left:4px solid #2196F3;display:none;">
+            <strong style="color:#1976D2">ℹ️ Este mensaje se enviará igual a todos los destinatarios.</strong>
         </div>
 
         <form id="formMasivo" onsubmit="enviarMasivo(event)">
@@ -102,14 +97,17 @@
                         style="color:#c00">*</span></label>
                 <textarea id="mensaje" name="mensaje" required rows="8"
                     style="width:100%;padding:0.75rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;resize:vertical;"
-                    placeholder="Escriba el mensaje aquí...">Estimado/a padre, madre o tutor de {alumno}:
+                    placeholder="Escriba el mensaje aquí...">Estimadas familias del Centro Educativo Nuevo Siglo:
 
-Le informamos que registra una deuda pendiente de {deuda} correspondiente a {curso}.
+Le informamos que registra un saldo pendiente de pago en su estado de cuenta.
 
-Para regularizar su situación, ingrese al portal de pagos del colegio.
+Para verificar los importes y regularizar su situación, ingrese al portal de pagos:
+https://pagos.colegionuevosiglo.edu.ar
+
+Ante cualquier duda o consulta, quedamos a su disposición.
 
 Atentamente,
-Colegio Nuevo Siglo</textarea>
+Administración Nuevo Siglo</textarea>
             </div>
 
             <div id="resultadoEnvio" style="display:none;padding:1rem;border-radius:8px;margin-bottom:1rem;"></div>
@@ -183,19 +181,22 @@ Colegio Nuevo Siglo</textarea>
         document.getElementById('resultadoEnvio').style.display = 'none';
         document.getElementById('modalTitle').innerText = '📧 AVISO DE DEUDA';
 
-        // Show variables info for this mode
-        document.getElementById('variablesInfo').style.display = 'block';
+        // Hide variables info — batch sends the same message to all
+        document.getElementById('variablesInfo').style.display = 'none';
 
-        // Reset to default generic message
+        // Reset to default generic message (sin placeholders)
         document.getElementById('asunto').value = 'Aviso de deuda pendiente - Colegio Nuevo Siglo';
-        document.getElementById('mensaje').value = `Estimado/a padre, madre o tutor de {alumno}:
+        document.getElementById('mensaje').value = `Estimadas familias del Centro Educativo Nuevo Siglo:
 
-Le informamos que registra una deuda pendiente de {deuda} correspondiente a {curso}.
+Le informamos que registra un saldo pendiente de pago en su estado de cuenta.
 
-Para regularizar su situación, ingrese al portal de pagos del colegio.
+Para verificar los importes y regularizar su situación, ingrese al portal de pagos:
+https://pagos.colegionuevosiglo.edu.ar
+
+Ante cualquier duda o consulta, quedamos a su disposición.
 
 Atentamente,
-Colegio Nuevo Siglo`;
+Administración Nuevo Siglo`;
 
         document.body.style.overflow = 'hidden';
     }
@@ -215,7 +216,7 @@ Colegio Nuevo Siglo`;
 Por medio del presente, les informamos que ya se encuentra disponible la cuota correspondiente al mes de ........... 2026.
 Podrán ingresar al siguiente link para verificar los importes y efectuar el pago:
 
-👉 renderbyte.net
+👉 https://pagos.colegionuevosiglo.edu.ar
 
 Les recordamos que los aranceles mensuales tienen como fecha de vencimiento el día 10 de cada mes.
 

@@ -677,8 +677,8 @@ def admin_avisos(request):
 def admin_enviar_avisos_masivos(request):
     """Enviar avisos masivos a todos los morosos por email.
     
-    Consulta la DB para obtener emails, personaliza mensajes por alumno,
-    y lanza el envío en un hilo separado para no trabar Railway.
+    Envía el mismo mensaje genérico a todos los morosos con email.
+    Lanza el envío en un hilo separado para no trabar Railway.
     """
     from .email_services import enviar_emails_masivos_async
     
@@ -694,12 +694,9 @@ def admin_enviar_avisos_masivos(request):
     # Obtener morosos con deuda pendiente
     alumnos_con_deuda = Alumno.objects.filter(
         deudas__estado='pendiente'
-    ).annotate(
-        total_deuda=Sum('deudas__monto', filter=Q(deudas__estado='pendiente'))
     ).distinct()
     
     destinatarios = []
-    mensajes_personalizados = []
     emails_sin_correo = []
     
     for alumno in alumnos_con_deuda:
@@ -712,15 +709,12 @@ def admin_enviar_avisos_masivos(request):
             email = alumno.padre_email or alumno.madre_email or alumno.tutor_email or alumno.email
         
         if email:
-            # Personalizar mensaje con datos del alumno
-            mensaje_personalizado = mensaje.replace('{alumno}', alumno.nombre_completo)
-            mensaje_personalizado = mensaje_personalizado.replace('{deuda}', f"${alumno.total_deuda:,.0f}")
-            mensaje_personalizado = mensaje_personalizado.replace('{curso}', alumno.curso_completo or '')
-            
             destinatarios.append(email)
-            mensajes_personalizados.append(mensaje_personalizado)
         else:
             emails_sin_correo.append(alumno.nombre_completo)
+    
+    # Deduplicar emails (un padre puede tener varios hijos)
+    destinatarios = list(set(destinatarios))
     
     if not destinatarios:
         return JsonResponse({
@@ -728,17 +722,23 @@ def admin_enviar_avisos_masivos(request):
             'error': 'No hay morosos con email registrado para enviar avisos'
         })
     
-    # Construir HTML del mensaje (opcional, mejora visual en Gmail)
-    mensaje_html_base = mensaje.replace('\n', '<br>')
+    # Construir versión HTML del mensaje con links clicables
+    import re
+    mensaje_html = mensaje.replace('\n', '<br>')
+    # Hacer clicables las URLs del portal
+    mensaje_html = re.sub(
+        r'(https?://[^\s<]+)',
+        r'<a href="\1" target="_blank" style="color:#1976D2;font-weight:bold;">\1</a>',
+        mensaje_html
+    )
+    mensaje_html = f'<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#333;">{mensaje_html}</div>'
     
     # Lanzar envío en hilo separado (no bloquea Railway)
-    # Nota: como cada moroso tiene mensaje personalizado, enviamos uno a uno
-    # pero el batching con pausa se maneja dentro de email_services
     enviar_emails_masivos_async(
         destinatarios=destinatarios,
         asunto=asunto,
-        mensaje_texto=mensaje,  # Se usa el texto base; personalización por alumno abajo
-        mensaje_html=None,
+        mensaje_texto=mensaje,
+        mensaje_html=mensaje_html,
         batch_size=50,
         delay=10,
         total_padres_db=len(destinatarios) + len(emails_sin_correo),
