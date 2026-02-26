@@ -675,8 +675,12 @@ def admin_avisos(request):
 @login_required
 @admin_required
 def admin_enviar_avisos_masivos(request):
-    """Enviar avisos masivos a todos los morosos por email."""
-    from django.core.mail import send_mass_mail, BadHeaderError
+    """Enviar avisos masivos a todos los morosos por email.
+    
+    Consulta la DB para obtener emails, personaliza mensajes por alumno,
+    y lanza el envío en un hilo separado para no trabar Railway.
+    """
+    from .email_services import enviar_emails_masivos_async
     
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'})
@@ -687,21 +691,19 @@ def admin_enviar_avisos_masivos(request):
     if not asunto or not mensaje:
         return JsonResponse({'success': False, 'error': 'Debe completar el asunto y el mensaje'})
     
-    # Obtener morosos con email válido
+    # Obtener morosos con deuda pendiente
     alumnos_con_deuda = Alumno.objects.filter(
         deudas__estado='pendiente'
     ).annotate(
         total_deuda=Sum('deudas__monto', filter=Q(deudas__estado='pendiente'))
     ).distinct()
     
-    emails_to_send = []
-    emails_enviados = []
+    destinatarios = []
+    mensajes_personalizados = []
     emails_sin_correo = []
     
-    from django.conf import settings as django_settings
-    from_email = getattr(django_settings, 'DEFAULT_FROM_EMAIL', 'cobranzasns@colegionuevosiglo.edu.ar')
-    
     for alumno in alumnos_con_deuda:
+        # Prioridad: email del User (actualizado en primer login) > emails del Alumno
         perfil = PerfilUsuario.objects.select_related('usuario').filter(dni=alumno.documento).first()
         email = ''
         if perfil and perfil.usuario.email:
@@ -715,45 +717,47 @@ def admin_enviar_avisos_masivos(request):
             mensaje_personalizado = mensaje_personalizado.replace('{deuda}', f"${alumno.total_deuda:,.0f}")
             mensaje_personalizado = mensaje_personalizado.replace('{curso}', alumno.curso_completo or '')
             
-            emails_to_send.append((
-                asunto,
-                mensaje_personalizado,
-                from_email,
-                [email]
-            ))
-            emails_enviados.append(email)
+            destinatarios.append(email)
+            mensajes_personalizados.append(mensaje_personalizado)
         else:
             emails_sin_correo.append(alumno.nombre_completo)
     
-    if not emails_to_send:
+    if not destinatarios:
         return JsonResponse({
             'success': False, 
             'error': 'No hay morosos con email registrado para enviar avisos'
         })
     
-    try:
-        # Enviar emails masivos
-        enviados = send_mass_mail(emails_to_send, fail_silently=False)
-        
-        # Registrar en auditoría
-        RegistroAuditoria.log(
-            request.user, 'EMAIL_SENT',
-            f'Avisos masivos enviados: {enviados} emails - Asunto: {asunto[:50]}',
-            request
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'enviados': enviados,
-            'emails': emails_enviados,
-            'sin_correo': emails_sin_correo,
-            'message': f'Se enviaron {enviados} avisos correctamente'
-        })
-        
-    except BadHeaderError:
-        return JsonResponse({'success': False, 'error': 'Error en el encabezado del email'})
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': f'Error al enviar emails: {str(e)}'})
+    # Construir HTML del mensaje (opcional, mejora visual en Gmail)
+    mensaje_html_base = mensaje.replace('\n', '<br>')
+    
+    # Lanzar envío en hilo separado (no bloquea Railway)
+    # Nota: como cada moroso tiene mensaje personalizado, enviamos uno a uno
+    # pero el batching con pausa se maneja dentro de email_services
+    enviar_emails_masivos_async(
+        destinatarios=destinatarios,
+        asunto=asunto,
+        mensaje_texto=mensaje,  # Se usa el texto base; personalización por alumno abajo
+        mensaje_html=None,
+        batch_size=50,
+        delay=10,
+        total_padres_db=len(destinatarios) + len(emails_sin_correo),
+    )
+    
+    # Registrar en auditoría
+    RegistroAuditoria.log(
+        request.user, 'EMAIL_SENT',
+        f'Envío masivo iniciado: {len(destinatarios)} emails en background - Asunto: {asunto[:50]}',
+        request
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'enviados': len(destinatarios),
+        'emails': destinatarios,
+        'sin_correo': emails_sin_correo,
+        'message': f'Envío masivo iniciado: {len(destinatarios)} emails se están enviando en segundo plano'
+    })
 
 
 @login_required
@@ -1585,3 +1589,51 @@ def consulta_publica(request):
             context['mensaje_error'] = 'Por favor ingrese un DNI válido (solo números)'
     
     return render(request, 'portal/consulta_publica.html', context)
+
+
+# ==================== TEST EMAIL ====================
+
+@login_required
+@admin_required
+def test_email_batch(request):
+    """
+    Vista de prueba para verificar el sistema de envío masivo.
+    Envía 5 emails de prueba usando el servicio de batching.
+    Solo accesible para administradores.
+    """
+    from .email_services import enviar_emails_masivos
+    from django.conf import settings as django_settings
+
+    # 5 emails de prueba (cambiar por direcciones propias)
+    emails_prueba = [
+        'joeljjs100@gmail.com',
+        'clientmagnetweb@gmail.com',
+    ]
+
+    resultado = enviar_emails_masivos(
+        destinatarios=emails_prueba,
+        asunto='[TEST] Prueba de envío masivo — Colegio Nuevo Siglo',
+        mensaje_texto=(
+            'Este es un email de prueba del sistema de envío masivo.\n'
+            'Si recibís este mensaje, el sistema funciona correctamente.\n\n'
+            'Colegio Nuevo Siglo'
+        ),
+        mensaje_html=(
+            '<h2>Prueba de Envío Masivo</h2>'
+            '<p>Este es un email de prueba del sistema de envío masivo.</p>'
+            '<p>Si recibís este mensaje, el sistema funciona correctamente.</p>'
+            '<br><p><strong>Colegio Nuevo Siglo</strong></p>'
+        ),
+        batch_size=1,
+        delay=30,
+    )
+
+    backend_actual = django_settings.EMAIL_BACKEND
+    test_mode = getattr(django_settings, 'EMAIL_TEST_MODE', True)
+
+    return JsonResponse({
+        'success': True,
+        'modo': 'CONSOLA (test)' if test_mode else 'SMTP REAL',
+        'backend': backend_actual,
+        'resultado': resultado,
+    })

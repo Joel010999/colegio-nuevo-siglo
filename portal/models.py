@@ -258,6 +258,7 @@ class RegistroAuditoria(models.Model):
         ('CONFIG_UPDATE', 'Actualización de Configuración'),
         ('USER_CREATED', 'Usuario Creado'),
         ('PASSWORD_RESET', 'Contraseña Reseteada'),
+        ('EMAIL_SENT', 'Email Enviado'),
     ]
     
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)

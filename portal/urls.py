@@ -35,4 +35,7 @@ urlpatterns = [
     path('admin-panel/exportar/', views.admin_exportar, name='admin_exportar'),
     path('admin-panel/config/', views.admin_config, name='admin_config'),
     path('admin-panel/auditoria/', views.admin_auditoria, name='admin_auditoria'),
+
+    # Test de email
+    path('admin-panel/test-email/', views.test_email_batch, name='test_email_batch'),
 ]
