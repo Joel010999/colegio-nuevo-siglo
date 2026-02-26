@@ -4,10 +4,15 @@ email_services.py — Servicio de envío masivo de emails con batching.
 Diseñado para enviar hasta 700+ emails sin que Gmail bloquee la cuenta.
 Divide los destinatarios en tandas de 50, con pausas entre tandas.
 Incluye ejecución en hilo separado para no trabar el servidor de Railway.
+
+Logs detallados para diagnóstico en producción (Railway).
 """
 
+import os
 import time
 import threading
+import traceback
+import smtplib
 import logging
 from django.core.mail import send_mail
 from django.conf import settings
@@ -51,8 +56,8 @@ def obtener_emails_desde_db():
                         emails.add(fallback.strip().lower())
 
     logger.info(
-        f"Consulta a DB: {len(emails)} emails válidos encontrados "
-        f"de {total_padres} perfiles de padre."
+        f"[EMAIL_DB] {len(emails)} emails válidos encontrados "
+        f"de {total_padres} perfiles de padre en la DB."
     )
 
     return {
@@ -100,12 +105,12 @@ def enviar_emails_masivos(
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', settings.EMAIL_HOST_USER)
 
     logger.info(
-        f"Iniciando envío masivo: {total} destinatarios, "
+        f"[EMAIL_BATCH] Iniciando envío masivo: {total} destinatarios, "
         f"{total_tandas} tandas de hasta {batch_size}"
     )
 
     for idx, tanda in enumerate(tandas, start=1):
-        logger.info(f"Procesando tanda {idx}/{total_tandas} ({len(tanda)} emails)...")
+        logger.info(f"[EMAIL_BATCH] Procesando tanda {idx}/{total_tandas} ({len(tanda)} emails)...")
 
         for email_dest in tanda:
             try:
@@ -118,20 +123,52 @@ def enviar_emails_masivos(
                     fail_silently=False,
                 )
                 enviados += 1
-                logger.debug(f"  ✓ Enviado a {email_dest}")
+                logger.debug(f"[EMAIL_BATCH]   ✓ Enviado a {email_dest}")
+
+            except smtplib.SMTPAuthenticationError as e:
+                error_msg = str(e)
+                fallidos.append({"email": email_dest, "error": error_msg})
+                logger.critical(
+                    "[EMAIL_BATCH] ERROR CRÍTICO: Error de autenticación SMTP. "
+                    "Revisar la App Password en Railway. "
+                    f"Detalle: {error_msg}"
+                )
+                # Si la autenticación falla, no tiene sentido seguir intentando
+                logger.critical(
+                    f"[EMAIL_BATCH] Abortando envío: {enviados}/{total} enviados "
+                    f"antes del error de autenticación."
+                )
+                return {
+                    "enviados": enviados,
+                    "fallidos": fallidos,
+                    "total": total,
+                    "abortado": True,
+                    "razon": "SMTP_AUTH_ERROR",
+                }
+
+            except smtplib.SMTPException as e:
+                error_msg = str(e)
+                fallidos.append({"email": email_dest, "error": error_msg})
+                logger.error(
+                    f"[EMAIL_BATCH]   ✗ Error SMTP enviando a {email_dest}: {error_msg}\n"
+                    f"{traceback.format_exc()}"
+                )
 
             except Exception as e:
                 error_msg = str(e)
                 fallidos.append({"email": email_dest, "error": error_msg})
-                logger.error(f"  ✗ Error enviando a {email_dest}: {error_msg}")
+                logger.error(
+                    f"[EMAIL_BATCH]   ✗ Error inesperado enviando a {email_dest}: {error_msg}\n"
+                    f"{traceback.format_exc()}"
+                )
 
         # Pausa entre tandas (no pausar después de la última)
         if idx < total_tandas:
-            logger.info(f"  Pausa de {delay}s antes de la siguiente tanda...")
+            logger.info(f"[EMAIL_BATCH]   Pausa de {delay}s antes de la siguiente tanda...")
             time.sleep(delay)
 
     logger.info(
-        f"Envío masivo finalizado: {enviados}/{total} enviados, "
+        f"[EMAIL_BATCH] Envío masivo finalizado: {enviados}/{total} enviados, "
         f"{len(fallidos)} fallidos"
     )
 
@@ -156,6 +193,9 @@ def enviar_emails_masivos_async(
     el servidor de Railway. El hilo ejecuta enviar_emails_masivos() y
     loguea el resultado final.
 
+    Toda la lógica del hilo está envuelta en try-except robusto para que
+    una excepción nunca mate el proceso silenciosamente.
+
     Args:
         destinatarios: Lista de emails.
         asunto: Asunto del email.
@@ -168,7 +208,26 @@ def enviar_emails_masivos_async(
     Returns:
         None (el resultado se loguea desde el hilo).
     """
+
+    # Validar que EMAIL_HOST_PASSWORD esté configurado antes de lanzar el hilo
+    email_password = os.environ.get('EMAIL_HOST_PASSWORD')
+    email_test_mode = getattr(settings, 'EMAIL_TEST_MODE', True)
+
+    if not email_test_mode and not email_password:
+        logger.critical(
+            "[EMAIL_THREAD] ERROR CRÍTICO: EMAIL_HOST_PASSWORD no está configurada "
+            "en las variables de entorno. No se puede enviar por SMTP real. "
+            "Configurar la App Password en Railway."
+        )
+        return
+
     def _worker():
+        logger.info(
+            f"[EMAIL_THREAD] ▶ Hilo de envío masivo INICIADO. "
+            f"{len(destinatarios)} destinatarios, modo: "
+            f"{'CONSOLA (test)' if email_test_mode else 'SMTP REAL'}."
+        )
+
         try:
             resultado = enviar_emails_masivos(
                 destinatarios=destinatarios,
@@ -178,22 +237,58 @@ def enviar_emails_masivos_async(
                 batch_size=batch_size,
                 delay=delay,
             )
+
             # Log de producción requerido
             logger.info(
-                f"Se enviaron {resultado['enviados']} mails de un total de "
-                f"{total_padres_db} padres encontrados en la DB"
+                f"[EMAIL_THREAD] Se enviaron {resultado['enviados']} mails "
+                f"de un total de {total_padres_db} padres encontrados en la DB"
             )
+
+            if resultado.get('abortado'):
+                logger.critical(
+                    f"[EMAIL_THREAD] ⛔ Envío ABORTADO por: {resultado.get('razon')}. "
+                    f"Enviados antes del error: {resultado['enviados']}/{resultado['total']}."
+                )
+
             if resultado['fallidos']:
                 logger.warning(
-                    f"Emails fallidos ({len(resultado['fallidos'])}): "
+                    f"[EMAIL_THREAD] Emails fallidos ({len(resultado['fallidos'])}): "
                     f"{[f['email'] for f in resultado['fallidos']]}"
                 )
-        except Exception as e:
-            logger.critical(f"Error fatal en hilo de envío masivo: {e}", exc_info=True)
 
-    hilo = threading.Thread(target=_worker, daemon=True)
+            logger.info(
+                f"[EMAIL_THREAD] ■ Hilo de envío masivo FINALIZADO exitosamente. "
+                f"Resultado: {resultado['enviados']}/{resultado['total']} enviados."
+            )
+
+        except smtplib.SMTPAuthenticationError as e:
+            logger.critical(
+                "[EMAIL_THREAD] ERROR CRÍTICO: Error de autenticación SMTP. "
+                "Revisar la App Password en Railway. "
+                f"Detalle: {e}\n{traceback.format_exc()}"
+            )
+
+        except smtplib.SMTPException as e:
+            logger.critical(
+                f"[EMAIL_THREAD] ERROR SMTP no recuperable: {e}\n"
+                f"{traceback.format_exc()}"
+            )
+
+        except ConnectionError as e:
+            logger.critical(
+                f"[EMAIL_THREAD] ERROR DE CONEXIÓN (timeout/red): {e}\n"
+                f"{traceback.format_exc()}"
+            )
+
+        except Exception as e:
+            logger.critical(
+                f"[EMAIL_THREAD] ERROR FATAL NO ESPERADO en hilo de envío masivo: {e}\n"
+                f"{traceback.format_exc()}"
+            )
+
+    hilo = threading.Thread(target=_worker, daemon=True, name="email_masivo_thread")
     hilo.start()
 
     logger.info(
-        f"Hilo de envío masivo iniciado: {len(destinatarios)} emails en background"
+        f"[EMAIL_THREAD] Hilo lanzado en background: {len(destinatarios)} emails pendientes."
     )
