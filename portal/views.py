@@ -869,224 +869,204 @@ def admin_importar(request):
             # Upsert no-destructivo: NO se borran deudas existentes.
             # Los pagos verificados y comprobantes enviados se preservan.
             
-            # Procesar Excel
+            # ============================================================
+            # PASO 1: Extraer datos crudos en una matriz genérica
+            # Soporta Excel (.xlsx/.xls) y CSV (.csv) de forma unificada.
+            # Scanner dinámico: busca la fila de headers en las primeras 10 filas.
+            # ============================================================
+            all_rows_raw = []  # Lista de listas (cada fila es una lista de valores)
+            
             if filename.endswith(('.xlsx', '.xls')):
                 wb = openpyxl.load_workbook(BytesIO(archivo.read()))
                 ws = wb.active
+                for row in ws.iter_rows(values_only=True):
+                    all_rows_raw.append(list(row))
+            
+            elif filename.endswith('.csv'):
+                decoded = archivo.read().decode('utf-8-sig')
+                lines = decoded.strip().split('\n')
+                delimiter = ',' if ',' in lines[0] else ';'
+                for line in lines:
+                    # Parsear respetando comillas
+                    import io
+                    reader = csv.reader(io.StringIO(line), delimiter=delimiter)
+                    for parsed_row in reader:
+                        all_rows_raw.append(parsed_row)
+                        break
+            else:
+                messages.error(request, 'Formato no soportado. Use Excel (.xlsx) o CSV (.csv)')
+                return render(request, 'portal/admin/importar.html', {'active_tab': 'importar'})
+            
+            if not all_rows_raw:
+                messages.error(request, 'El archivo está vacío.')
+                return render(request, 'portal/admin/importar.html', {'active_tab': 'importar'})
+            
+            # ============================================================
+            # PASO 2: Scanner dinámico de headers
+            # Busca en las primeras 10 filas la que contenga 'documento' y 'apellido'.
+            # ============================================================
+            headers = []
+            headers_raw = []
+            header_row_idx = None
+            
+            scan_limit = min(10, len(all_rows_raw))
+            for i in range(scan_limit):
+                row_lower = [str(cell).strip().lower() if cell else '' for cell in all_rows_raw[i]]
+                if 'documento' in row_lower and 'apellido' in row_lower:
+                    header_row_idx = i
+                    headers = row_lower
+                    headers_raw = [str(cell).strip() if cell else '' for cell in all_rows_raw[i]]
+                    break
+            
+            if header_row_idx is None:
+                messages.error(request, 'No se encontró la fila de encabezados (debe contener "Documento" y "Apellido") en las primeras 10 filas.')
+                return render(request, 'portal/admin/importar.html', {'active_tab': 'importar'})
+            
+            # Las filas de datos son las que siguen al header
+            data_rows = all_rows_raw[header_row_idx + 1:]
+            
+            # ============================================================
+            # PASO 3: Detectar formato colegio vs estándar
+            # ============================================================
+            is_colegio_format = (
+                'documento' in headers and
+                'apellido' in headers and
+                any('_' in h for h in headers)  # Columnas de concepto tienen formato N_Concepto
+            )
+            
+            # ============================================================
+            # PASO 4: Procesar datos
+            # ============================================================
+            if is_colegio_format:
+                # FORMATO DEL COLEGIO - Columnas pivoteadas
+                # Identificar columnas de conceptos (tienen formato: numero_nombre)
+                concepto_columns = []
+                for idx, header in enumerate(headers_raw):
+                    if '_' in header and idx > 7:
+                        concepto_columns.append((idx, header))
                 
-                # Obtener headers
-                headers = []
-                headers_raw = []
-                for cell in ws[1]:
-                    raw_val = str(cell.value).strip() if cell.value else ''
-                    headers_raw.append(raw_val)
-                    headers.append(raw_val.lower())
+                # Ocultar template viejo: marcar todos los conceptos como inactivos
+                ConceptoDeuda.objects.all().update(orden=9999)
                 
-                # Detectar formato del colegio (columnas pivoteadas de conceptos)
-                # El formato del colegio tiene: Documento, Apellido, Nombres, Niv, Cur, Div
-                # y columnas de conceptos como: 0_Matrícula, 1_Cuota, 2_Cuota, etc.
-                is_colegio_format = (
-                    'documento' in headers and 
-                    'apellido' in headers and
-                    any('_' in h for h in headers)  # Columnas de concepto tienen formato N_Concepto
-                )
+                # Pre-registrar conceptos del Excel con su orden de columna
+                for col_idx, concepto_header in concepto_columns:
+                    parts = concepto_header.split('_', 1)
+                    if len(parts) == 2:
+                        c_codigo = parts[0]
+                        c_nombre = parts[1].replace('_', ' ').title()
+                    else:
+                        c_codigo = concepto_header[:10]
+                        c_nombre = concepto_header
+                    concepto_obj, _ = ConceptoDeuda.objects.get_or_create(
+                        codigo=c_codigo,
+                        defaults={'nombre': c_nombre, 'orden': col_idx}
+                    )
+                    concepto_obj.orden = col_idx
+                    concepto_obj.save()
                 
-                if is_colegio_format:
-                    # FORMATO DEL COLEGIO - Columnas pivoteadas
-                    # Identificar columnas de conceptos (tienen formato: numero_nombre)
-                    concepto_columns = []
-                    for idx, header in enumerate(headers_raw):
-                        if '_' in header and idx > 7:  # Las primeras 8 columnas son datos del alumno
-                            concepto_columns.append((idx, header))
+                # Procesar cada fila de datos
+                for data_row_offset, row_values in enumerate(data_rows):
+                    row_idx = header_row_idx + 2 + data_row_offset  # Número de fila real (1-indexed)
                     
-                    # Ocultar template viejo: marcar todos los conceptos como inactivos
-                    ConceptoDeuda.objects.all().update(orden=9999)
+                    if not any(v for v in row_values if v is not None and str(v).strip()):
+                        continue
                     
-                    # Pre-registrar conceptos del Excel con su orden de columna
+                    # Crear diccionario con headers
+                    row_dict = {}
+                    for i, value in enumerate(row_values):
+                        if i < len(headers):
+                            row_dict[headers[i]] = value
+                    
+                    # Extraer datos del alumno
+                    dni_val = row_dict.get('documento')
+                    if not dni_val:
+                        errores.append(f'Fila {row_idx}: Sin documento')
+                        skipped += 1
+                        continue
+                    
+                    try:
+                        dni_alumno = int(dni_val)
+                    except:
+                        errores.append(f'Fila {row_idx}: DNI inválido "{dni_val}"')
+                        skipped += 1
+                        continue
+                    
+                    apellido = str(row_dict.get('apellido', '')).strip()
+                    nombres = str(row_dict.get('nombres', '')).strip()
+                    nivel = str(row_dict.get('niv', '')).strip()
+                    curso = str(row_dict.get('cur', '')).strip()
+                    division = str(row_dict.get('div', '')).strip()
+                    
+                    # Crear/obtener alumno
+                    alumno, alumno_created = Alumno.objects.get_or_create(
+                        documento=dni_alumno,
+                        defaults={
+                            'apellido': apellido,
+                            'nombres': nombres,
+                            'nivel': nivel,
+                            'curso': curso,
+                            'division': division,
+                        }
+                    )
+                    
+                    # Actualizar datos si cambió
+                    if not alumno_created:
+                        updated_alumno = False
+                        if nivel and alumno.nivel != nivel:
+                            alumno.nivel = nivel
+                            updated_alumno = True
+                        if curso and alumno.curso != curso:
+                            alumno.curso = curso
+                            updated_alumno = True
+                        if division and alumno.division != division:
+                            alumno.division = division
+                            updated_alumno = True
+                        if updated_alumno:
+                            alumno.save()
+                    
+                    # Crear usuario si no existe
+                    username = str(dni_alumno)
+                    if not User.objects.filter(username=username).exists():
+                        user = User.objects.create_user(
+                            username=username,
+                            password=config.password_default,
+                            first_name=nombres,
+                            last_name=apellido
+                        )
+                        PerfilUsuario.objects.create(
+                            usuario=user,
+                            dni=dni_alumno,
+                            rol='padre',
+                            must_change_password=True
+                        )
+                        users_created += 1
+                    
+                    # Procesar cada columna de concepto
                     for col_idx, concepto_header in concepto_columns:
+                        monto_val = row_values[col_idx] if col_idx < len(row_values) else None
+                        
+                        if monto_val is None or str(monto_val).strip() == '' or monto_val == 0:
+                            continue  # Sin deuda en este concepto
+                        
+                        # Parsear nombre del concepto (formato: "N_NombreConcepto")
                         parts = concepto_header.split('_', 1)
                         if len(parts) == 2:
-                            c_codigo = parts[0]
-                            c_nombre = parts[1].replace('_', ' ').title()
+                            concepto_codigo = parts[0]
+                            concepto_nombre = parts[1].replace('_', ' ').title()
                         else:
-                            c_codigo = concepto_header[:10]
-                            c_nombre = concepto_header
-                        concepto_obj, _ = ConceptoDeuda.objects.get_or_create(
-                            codigo=c_codigo,
-                            defaults={'nombre': c_nombre, 'orden': col_idx}
-                        )
-                        concepto_obj.orden = col_idx
-                        concepto_obj.save()
-                    
-                    # Procesar cada fila
-                    for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-                        if not any(row):
-                            continue
+                            concepto_codigo = concepto_header[:10]
+                            concepto_nombre = concepto_header
                         
-                        # Crear diccionario con headers
-                        row_dict = {}
-                        for i, value in enumerate(row):
-                            if i < len(headers):
-                                row_dict[headers[i]] = value
-                        
-                        # Extraer datos del alumno
-                        dni_val = row_dict.get('documento')
-                        if not dni_val:
-                            errores.append(f'Fila {row_idx}: Sin documento')
-                            skipped += 1
-                            continue
-                        
-                        try:
-                            dni_alumno = int(dni_val)
-                        except:
-                            errores.append(f'Fila {row_idx}: DNI inválido "{dni_val}"')
-                            skipped += 1
-                            continue
-                        
-                        apellido = str(row_dict.get('apellido', '')).strip()
-                        nombres = str(row_dict.get('nombres', '')).strip()
-                        nivel = str(row_dict.get('niv', '')).strip()
-                        curso = str(row_dict.get('cur', '')).strip()
-                        division = str(row_dict.get('div', '')).strip()
-                        
-                        # Crear/obtener alumno
-                        alumno, alumno_created = Alumno.objects.get_or_create(
-                            documento=dni_alumno,
-                            defaults={
-                                'apellido': apellido,
-                                'nombres': nombres,
-                                'nivel': nivel,
-                                'curso': curso,
-                                'division': division,
-                            }
+                        # Obtener o crear concepto (ya pre-registrados, pero por seguridad)
+                        concepto, _ = ConceptoDeuda.objects.get_or_create(
+                            codigo=concepto_codigo,
+                            defaults={'nombre': concepto_nombre, 'orden': int(concepto_codigo) if concepto_codigo.isdigit() else 99}
                         )
                         
-                        # Actualizar datos si cambió
-                        if not alumno_created:
-                            updated_alumno = False
-                            if nivel and alumno.nivel != nivel:
-                                alumno.nivel = nivel
-                                updated_alumno = True
-                            if curso and alumno.curso != curso:
-                                alumno.curso = curso
-                                updated_alumno = True
-                            if division and alumno.division != division:
-                                alumno.division = division
-                                updated_alumno = True
-                            if updated_alumno:
-                                alumno.save()
-                        
-                        # Crear usuario si no existe
-                        username = str(dni_alumno)
-                        if not User.objects.filter(username=username).exists():
-                            user = User.objects.create_user(
-                                username=username,
-                                password=config.password_default,
-                                first_name=nombres,
-                                last_name=apellido
-                            )
-                            PerfilUsuario.objects.create(
-                                usuario=user,
-                                dni=dni_alumno,
-                                rol='padre',
-                                must_change_password=True
-                            )
-                            users_created += 1
-                        
-                        # Procesar cada columna de concepto
-                        for col_idx, concepto_header in concepto_columns:
-                            monto_val = row[col_idx] if col_idx < len(row) else None
-                            
-                            if monto_val is None or monto_val == '' or monto_val == 0:
-                                continue  # Sin deuda en este concepto
-                            
-                                                        
-                            # Parsear nombre del concepto (formato: "N_NombreConcepto")
-                            parts = concepto_header.split('_', 1)
-                            if len(parts) == 2:
-                                concepto_codigo = parts[0]
-                                concepto_nombre = parts[1].replace('_', ' ').title()
-                            else:
-                                concepto_codigo = concepto_header[:10]
-                                concepto_nombre = concepto_header
-                            
-                            # Obtener o crear concepto
-                            concepto, _ = ConceptoDeuda.objects.get_or_create(
-                                codigo=concepto_codigo,
-                                defaults={'nombre': concepto_nombre, 'orden': int(concepto_codigo) if concepto_codigo.isdigit() else 99}
-                            )
-                            
-                            # Validar valores especiales (Texto)
-                            val_str = str(monto_val).lower().strip()
-                            if 'pagad' in val_str:
-                                # Marcar como pagado (monto 0)
-                                deuda_existente = RegistroDeuda.objects.filter(
-                                    alumno=alumno,
-                                    concepto=concepto
-                                ).first()
-                                
-                                if deuda_existente:
-                                    # Proteger pagos verificados/comprobantes enviados
-                                    if deuda_existente.estado in ('pago_verificado', 'comprobante_enviado'):
-                                        skipped += 1
-                                        continue
-                                    if reemplazar and deuda_existente.estado == 'pendiente':
-                                        deuda_existente.monto = 0
-                                        deuda_existente.estado = 'pagado'
-                                        deuda_existente.save()
-                                        updated += 1
-                                    else:
-                                        duplicados += 1
-                                else:
-                                    RegistroDeuda.objects.create(
-                                        alumno=alumno,
-                                        concepto=concepto,
-                                        monto=0,
-                                        periodo='',
-                                        estado='pagado'
-                                    )
-                                    added += 1
-                                continue
-                            
-                            if 'no corresponde' in val_str or 'nocorresponde' in val_str:
-                                # Marcar como "No Corresponde"
-                                deuda_existente = RegistroDeuda.objects.filter(
-                                    alumno=alumno,
-                                    concepto=concepto
-                                ).first()
-                                
-                                if deuda_existente:
-                                    # Proteger pagos verificados/comprobantes enviados
-                                    if deuda_existente.estado in ('pago_verificado', 'comprobante_enviado'):
-                                        skipped += 1
-                                        continue
-                                    if reemplazar and deuda_existente.estado == 'pendiente':
-                                        deuda_existente.monto = 0
-                                        deuda_existente.estado = 'no_corresponde'
-                                        deuda_existente.save()
-                                        updated += 1
-                                    else:
-                                        duplicados += 1
-                                else:
-                                    RegistroDeuda.objects.create(
-                                        alumno=alumno,
-                                        concepto=concepto,
-                                        monto=0,
-                                        periodo='',
-                                        estado='no_corresponde'
-                                    )
-                                    added += 1
-                                continue
-
-                            try:
-                                monto = Decimal(str(monto_val).replace(',', '.'))
-                                if monto <= 0:
-                                    continue
-                            except:
-                                continue
-                            
-
-                            # Verificar duplicado (mismo alumno + concepto)
+                        # Validar valores especiales (Texto)
+                        val_str = str(monto_val).lower().strip()
+                        if 'pagad' in val_str:
+                            # Marcar como pagado (monto 0)
                             deuda_existente = RegistroDeuda.objects.filter(
                                 alumno=alumno,
                                 concepto=concepto
@@ -1098,7 +1078,8 @@ def admin_importar(request):
                                     skipped += 1
                                     continue
                                 if reemplazar and deuda_existente.estado == 'pendiente':
-                                    deuda_existente.monto = monto
+                                    deuda_existente.monto = 0
+                                    deuda_existente.estado = 'pagado'
                                     deuda_existente.save()
                                     updated += 1
                                 else:
@@ -1107,45 +1088,90 @@ def admin_importar(request):
                                 RegistroDeuda.objects.create(
                                     alumno=alumno,
                                     concepto=concepto,
-                                    monto=monto,
+                                    monto=0,
                                     periodo='',
-                                    estado='pendiente'
+                                    estado='pagado'
                                 )
                                 added += 1
-                
-                else:
-                    # FORMATO ESTÁNDAR - Una fila por deuda
-                    for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-                        if not any(row):
                             continue
                         
-                        row_dict = {}
-                        for i, value in enumerate(row):
-                            if i < len(headers) and headers[i]:
-                                row_dict[headers[i]] = str(value).strip() if value is not None else ''
+                        if 'no corresponde' in val_str or 'nocorresponde' in val_str:
+                            # Marcar como "No Corresponde"
+                            deuda_existente = RegistroDeuda.objects.filter(
+                                alumno=alumno,
+                                concepto=concepto
+                            ).first()
+                            
+                            if deuda_existente:
+                                # Proteger pagos verificados/comprobantes enviados
+                                if deuda_existente.estado in ('pago_verificado', 'comprobante_enviado'):
+                                    skipped += 1
+                                    continue
+                                if reemplazar and deuda_existente.estado == 'pendiente':
+                                    deuda_existente.monto = 0
+                                    deuda_existente.estado = 'no_corresponde'
+                                    deuda_existente.save()
+                                    updated += 1
+                                else:
+                                    duplicados += 1
+                            else:
+                                RegistroDeuda.objects.create(
+                                    alumno=alumno,
+                                    concepto=concepto,
+                                    monto=0,
+                                    periodo='',
+                                    estado='no_corresponde'
+                                )
+                                added += 1
+                            continue
+
+                        try:
+                            monto = Decimal(str(monto_val).replace(',', '.'))
+                            if monto <= 0:
+                                continue
+                        except:
+                            continue
+
+                        # Verificar duplicado (mismo alumno + concepto)
+                        deuda_existente = RegistroDeuda.objects.filter(
+                            alumno=alumno,
+                            concepto=concepto
+                        ).first()
                         
-                        result = procesar_fila_estandar(row_idx, row_dict, config, reemplazar)
-                        if result['status'] == 'added':
+                        if deuda_existente:
+                            # Proteger pagos verificados/comprobantes enviados
+                            if deuda_existente.estado in ('pago_verificado', 'comprobante_enviado'):
+                                skipped += 1
+                                continue
+                            if reemplazar and deuda_existente.estado == 'pendiente':
+                                deuda_existente.monto = monto
+                                deuda_existente.save()
+                                updated += 1
+                            else:
+                                duplicados += 1
+                        else:
+                            RegistroDeuda.objects.create(
+                                alumno=alumno,
+                                concepto=concepto,
+                                monto=monto,
+                                periodo='',
+                                estado='pendiente'
+                            )
                             added += 1
-                        elif result['status'] == 'updated':
-                            updated += 1
-                        elif result['status'] == 'duplicado':
-                            duplicados += 1
-                        elif result['status'] == 'error':
-                            skipped += 1
-                            errores.append(result['error'])
-                        if result.get('user_created'):
-                            users_created += 1
             
-            # Procesar CSV (formato estándar)
-            elif filename.endswith('.csv'):
-                decoded = archivo.read().decode('utf-8-sig')
-                lines = decoded.strip().split('\n')
-                delimiter = ',' if ',' in lines[0] else ';'
-                reader = csv.DictReader(lines, delimiter=delimiter)
-                
-                for row_idx, row in enumerate(reader, start=2):
-                    row_dict = {k.lower().strip(): v.strip() for k, v in row.items() if k}
+            else:
+                # FORMATO ESTÁNDAR - Una fila por deuda
+                for data_row_offset, row_values in enumerate(data_rows):
+                    row_idx = header_row_idx + 2 + data_row_offset
+                    
+                    if not any(v for v in row_values if v is not None and str(v).strip()):
+                        continue
+                    
+                    row_dict = {}
+                    for i, value in enumerate(row_values):
+                        if i < len(headers) and headers[i]:
+                            row_dict[headers[i]] = str(value).strip() if value is not None else ''
+                    
                     result = procesar_fila_estandar(row_idx, row_dict, config, reemplazar)
                     if result['status'] == 'added':
                         added += 1
@@ -1158,9 +1184,6 @@ def admin_importar(request):
                         errores.append(result['error'])
                     if result.get('user_created'):
                         users_created += 1
-            else:
-                messages.error(request, 'Formato no soportado. Use Excel (.xlsx) o CSV (.csv)')
-                return render(request, 'portal/admin/importar.html', {'active_tab': 'importar'})
             
             # Guardar resultados
             resultados = {
