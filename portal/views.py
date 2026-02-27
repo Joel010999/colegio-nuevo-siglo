@@ -866,9 +866,8 @@ def admin_importar(request):
         errores = []
         
         try:
-            # Reiniciar la base de datos de deudas y pagos antes de importar
-            # Esto reinicia los contadores del dashboard
-            RegistroDeuda.objects.all().delete()
+            # Upsert no-destructivo: NO se borran deudas existentes.
+            # Los pagos verificados y comprobantes enviados se preservan.
             
             # Procesar Excel
             if filename.endswith(('.xlsx', '.xls')):
@@ -1001,15 +1000,18 @@ def admin_importar(request):
                             # Validar valores especiales (Texto)
                             val_str = str(monto_val).lower().strip()
                             if 'pagad' in val_str:
-                                # Crear deuda pagada (monto 0 para no afectar deuda total, pero estado pagado)
-                                # Verificar duplicado (mismo alumno + concepto)
+                                # Marcar como pagado (monto 0)
                                 deuda_existente = RegistroDeuda.objects.filter(
                                     alumno=alumno,
                                     concepto=concepto
                                 ).first()
                                 
                                 if deuda_existente:
-                                    if reemplazar:
+                                    # Proteger pagos verificados/comprobantes enviados
+                                    if deuda_existente.estado in ('pago_verificado', 'comprobante_enviado'):
+                                        skipped += 1
+                                        continue
+                                    if reemplazar and deuda_existente.estado == 'pendiente':
                                         deuda_existente.monto = 0
                                         deuda_existente.estado = 'pagado'
                                         deuda_existente.save()
@@ -1028,14 +1030,18 @@ def admin_importar(request):
                                 continue
                             
                             if 'no corresponde' in val_str or 'nocorresponde' in val_str:
-                                # Crear registro "No Corresponde"
+                                # Marcar como "No Corresponde"
                                 deuda_existente = RegistroDeuda.objects.filter(
                                     alumno=alumno,
                                     concepto=concepto
                                 ).first()
                                 
                                 if deuda_existente:
-                                    if reemplazar:
+                                    # Proteger pagos verificados/comprobantes enviados
+                                    if deuda_existente.estado in ('pago_verificado', 'comprobante_enviado'):
+                                        skipped += 1
+                                        continue
+                                    if reemplazar and deuda_existente.estado == 'pendiente':
                                         deuda_existente.monto = 0
                                         deuda_existente.estado = 'no_corresponde'
                                         deuda_existente.save()
@@ -1068,9 +1074,12 @@ def admin_importar(request):
                             ).first()
                             
                             if deuda_existente:
-                                if reemplazar:
+                                # Proteger pagos verificados/comprobantes enviados
+                                if deuda_existente.estado in ('pago_verificado', 'comprobante_enviado'):
+                                    skipped += 1
+                                    continue
+                                if reemplazar and deuda_existente.estado == 'pendiente':
                                     deuda_existente.monto = monto
-                                    deuda_existente.estado = 'pendiente'
                                     deuda_existente.save()
                                     updated += 1
                                 else:
@@ -1272,7 +1281,12 @@ def procesar_fila_estandar(row_idx, row, config, reemplazar):
     ).first()
     
     if deuda_existente:
-        if reemplazar:
+        # Proteger pagos verificados/comprobantes enviados
+        if deuda_existente.estado in ('pago_verificado', 'comprobante_enviado'):
+            result['status'] = 'error'
+            result['error'] = f'Fila {row_idx}: Pago ya verificado, no se modifica'
+            return result
+        if reemplazar and deuda_existente.estado == 'pendiente':
             deuda_existente.monto = monto
             deuda_existente.save()
             result['status'] = 'updated'
