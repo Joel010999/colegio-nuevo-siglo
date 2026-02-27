@@ -1304,8 +1304,9 @@ def admin_exportar(request):
     if request.method == 'POST':
         formato = request.POST.get('formato', 'csv')
         
-        # 1. Obtener todos los conceptos para encabezados (Columnas I en adelante)
-        conceptos = ConceptoDeuda.objects.all().order_by('orden', 'codigo')
+        # 1. Obtener solo los conceptos en uso activo para encabezados (Columnas I en adelante)
+        conceptos_usados = RegistroDeuda.objects.values_list('concepto_id', flat=True).distinct()
+        conceptos = ConceptoDeuda.objects.filter(id__in=conceptos_usados).order_by('orden', 'codigo')
         
         # 2. Obtener todos los alumnos
         alumnos = Alumno.objects.all().order_by('apellido', 'nombres')
