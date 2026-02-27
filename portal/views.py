@@ -899,6 +899,25 @@ def admin_importar(request):
                         if '_' in header and idx > 7:  # Las primeras 8 columnas son datos del alumno
                             concepto_columns.append((idx, header))
                     
+                    # Ocultar template viejo: marcar todos los conceptos como inactivos
+                    ConceptoDeuda.objects.all().update(orden=9999)
+                    
+                    # Pre-registrar conceptos del Excel con su orden de columna
+                    for col_idx, concepto_header in concepto_columns:
+                        parts = concepto_header.split('_', 1)
+                        if len(parts) == 2:
+                            c_codigo = parts[0]
+                            c_nombre = parts[1].replace('_', ' ').title()
+                        else:
+                            c_codigo = concepto_header[:10]
+                            c_nombre = concepto_header
+                        concepto_obj, _ = ConceptoDeuda.objects.get_or_create(
+                            codigo=c_codigo,
+                            defaults={'nombre': c_nombre, 'orden': col_idx}
+                        )
+                        concepto_obj.orden = col_idx
+                        concepto_obj.save()
+                    
                     # Procesar cada fila
                     for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
                         if not any(row):
@@ -1318,9 +1337,8 @@ def admin_exportar(request):
     if request.method == 'POST':
         formato = request.POST.get('formato', 'csv')
         
-        # 1. Obtener solo los conceptos en uso activo para encabezados (Columnas I en adelante)
-        conceptos_usados = RegistroDeuda.objects.values_list('concepto_id', flat=True).distinct()
-        conceptos = ConceptoDeuda.objects.filter(id__in=conceptos_usados).order_by('orden', 'codigo')
+        # 1. Obtener conceptos activos (los del ultimo Excel importado, orden < 9000)
+        conceptos = ConceptoDeuda.objects.filter(orden__lt=9000).order_by('orden')
         
         # 2. Obtener todos los alumnos
         alumnos = Alumno.objects.all().order_by('apellido', 'nombres')
