@@ -961,17 +961,16 @@ def admin_importar(request):
                 
                 # Pre-registrar conceptos del Excel con su orden de columna
                 for col_idx, concepto_header in concepto_columns:
-                    parts = concepto_header.split('_', 1)
-                    if len(parts) == 2:
-                        c_codigo = parts[0]
-                        c_nombre = parts[1].replace('_', ' ').title()
+                    c_nombre = str(concepto_header).strip()
+                    if len(c_nombre) > 20:
+                        c_codigo = (c_nombre[:10] + c_nombre[-10:]).upper().replace(' ', '_')
                     else:
-                        c_codigo = concepto_header[:10]
-                        c_nombre = concepto_header
+                        c_codigo = c_nombre.upper().replace(' ', '_')
                     concepto_obj, _ = ConceptoDeuda.objects.get_or_create(
                         codigo=c_codigo,
                         defaults={'nombre': c_nombre, 'orden': col_idx}
                     )
+                    concepto_obj.nombre = c_nombre
                     concepto_obj.orden = col_idx
                     concepto_obj.save()
                 
@@ -1059,19 +1058,17 @@ def admin_importar(request):
                         if monto_val is None or str(monto_val).strip() == '' or monto_val == 0:
                             continue  # Sin deuda en este concepto
                         
-                        # Parsear nombre del concepto (formato: "N_NombreConcepto")
-                        parts = concepto_header.split('_', 1)
-                        if len(parts) == 2:
-                            concepto_codigo = parts[0]
-                            concepto_nombre = parts[1].replace('_', ' ').title()
+                        # Código único derivado del header completo (sin split)
+                        c_nombre = str(concepto_header).strip()
+                        if len(c_nombre) > 20:
+                            concepto_codigo = (c_nombre[:10] + c_nombre[-10:]).upper().replace(' ', '_')
                         else:
-                            concepto_codigo = concepto_header[:10]
-                            concepto_nombre = concepto_header
+                            concepto_codigo = c_nombre.upper().replace(' ', '_')
                         
                         # Obtener o crear concepto (ya pre-registrados, pero por seguridad)
                         concepto, _ = ConceptoDeuda.objects.get_or_create(
                             codigo=concepto_codigo,
-                            defaults={'nombre': concepto_nombre, 'orden': int(concepto_codigo) if concepto_codigo.isdigit() else 99}
+                            defaults={'nombre': c_nombre, 'orden': col_idx}
                         )
                         
                         # Validar valores especiales (Texto)
@@ -1410,7 +1407,14 @@ def admin_exportar(request):
         # Headers del archivo
         headers = ['Familia', 'Documento', 'Apellido', 'Nombres', 'Niv', 'Cur', 'Div', 'Saldo_Moroso']
         # Agregar headers dinámicos de conceptos
-        headers.extend([f"{c.codigo}_{c.nombre}" for c in conceptos])
+        # Si c.nombre ya tiene patrón "dígito_", usarlo directo (viene del import colegio)
+        header_cols = []
+        for c in conceptos:
+            if re.match(r'^\d+_', c.nombre):
+                header_cols.append(c.nombre)
+            else:
+                header_cols.append(f"{c.codigo}_{c.nombre}")
+        headers.extend(header_cols)
         
         # Construir filas
         rows = []
