@@ -883,12 +883,17 @@ def admin_importar(request):
                     all_rows_raw.append(list(row))
             
             elif filename.endswith('.csv'):
-                decoded = archivo.read().decode('utf-8-sig')
+                raw_bytes = archivo.read()
+                try:
+                    decoded = raw_bytes.decode('utf-8-sig')
+                except UnicodeDecodeError:
+                    decoded = raw_bytes.decode('latin-1')
                 lines = decoded.strip().split('\n')
-                delimiter = ',' if ',' in lines[0] else ';'
+                # Detectar delimitador con la primera línea no-vacía
+                sample_line = next((l for l in lines if l.strip()), '')
+                delimiter = ';' if sample_line.count(';') > sample_line.count(',') else ','
+                import io
                 for line in lines:
-                    # Parsear respetando comillas
-                    import io
                     reader = csv.reader(io.StringIO(line), delimiter=delimiter)
                     for parsed_row in reader:
                         all_rows_raw.append(parsed_row)
@@ -927,23 +932,29 @@ def admin_importar(request):
             
             # ============================================================
             # PASO 3: Detectar formato colegio vs estándar
+            # Formato colegio: columnas de concepto tienen patrón "dígito_nombre"
+            # Esto evita falsos positivos con headers como tutor_email, nombre_alumno, etc.
             # ============================================================
+            concepto_pattern = re.compile(r'^\d+_')
+            concepto_columns = [
+                (idx, h_raw) for idx, (h, h_raw) in enumerate(zip(headers, headers_raw))
+                if concepto_pattern.match(h)
+            ]
             is_colegio_format = (
                 'documento' in headers and
                 'apellido' in headers and
-                any('_' in h for h in headers)  # Columnas de concepto tienen formato N_Concepto
+                len(concepto_columns) > 0
             )
+            
+            # Diagnóstico (visible en logs de Railway)
+            print(f"[IMPORTAR] Header en fila {header_row_idx + 1}: {headers_raw[:5]}...")
+            print(f"[IMPORTAR] Formato: {'COLEGIO' if is_colegio_format else 'ESTÁNDAR'} | Conceptos detectados: {len(concepto_columns)}")
             
             # ============================================================
             # PASO 4: Procesar datos
             # ============================================================
             if is_colegio_format:
                 # FORMATO DEL COLEGIO - Columnas pivoteadas
-                # Identificar columnas de conceptos (tienen formato: numero_nombre)
-                concepto_columns = []
-                for idx, header in enumerate(headers_raw):
-                    if '_' in header and idx > 7:
-                        concepto_columns.append((idx, header))
                 
                 # Ocultar template viejo: marcar todos los conceptos como inactivos
                 ConceptoDeuda.objects.all().update(orden=9999)
