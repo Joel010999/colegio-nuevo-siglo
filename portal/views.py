@@ -190,12 +190,12 @@ def portal_padre(request):
         ).prefetch_related('deudas', 'deudas__concepto').distinct()
         
         for alumno in alumnos:
-            deudas = alumno.deudas.filter(monto__gt=0).exclude(estado__in=['pago_verificado', 'no_corresponde', 'pagado'])
-            total_alumno = deudas.filter(estado='pendiente').aggregate(total=Sum('monto'))['total'] or 0
+            total_alumno = alumno.deudas.filter(estado='pendiente', monto__gt=0).aggregate(total=Sum('monto'))['total'] or 0
+            deudas_mostrar = alumno.deudas.exclude(estado='no_corresponde').order_by('concepto__orden')
             
             alumnos_data.append({
                 'alumno': alumno,
-                'deudas': deudas,
+                'deudas': deudas_mostrar,
                 'total': total_alumno,
             })
             total_general += total_alumno
