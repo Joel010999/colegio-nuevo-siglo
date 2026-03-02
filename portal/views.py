@@ -858,6 +858,9 @@ def admin_importar(request):
         filename = archivo.name.lower()
         
         config = ConfiguracionSistema.get_config()
+        # Pre-hash: hashear la password una sola vez (no 460 veces en el loop)
+        from django.contrib.auth.hashers import make_password
+        hashed_default_pwd = make_password(config.password_default)
         added = 0
         updated = 0
         skipped = 0
@@ -1037,9 +1040,9 @@ def admin_importar(request):
                     # Crear usuario si no existe
                     username = str(dni_alumno)
                     if not User.objects.filter(username=username).exists():
-                        user = User.objects.create_user(
+                        user = User.objects.create(
                             username=username,
-                            password=config.password_default,
+                            password=hashed_default_pwd,
                             first_name=nombres,
                             last_name=apellido
                         )
@@ -1180,7 +1183,7 @@ def admin_importar(request):
                         if i < len(headers) and headers[i]:
                             row_dict[headers[i]] = str(value).strip() if value is not None else ''
                     
-                    result = procesar_fila_estandar(row_idx, row_dict, config, reemplazar)
+                    result = procesar_fila_estandar(row_idx, row_dict, config, reemplazar, hashed_default_pwd)
                     if result['status'] == 'added':
                         added += 1
                     elif result['status'] == 'updated':
@@ -1228,7 +1231,7 @@ def admin_importar(request):
     return render(request, 'portal/admin/importar.html', context)
 
 
-def procesar_fila_estandar(row_idx, row, config, reemplazar):
+def procesar_fila_estandar(row_idx, row, config, reemplazar, hashed_default_pwd):
     """Procesa una fila en formato estándar (una deuda por fila)."""
     result = {'status': 'error', 'error': '', 'user_created': False}
     
@@ -1303,9 +1306,9 @@ def procesar_fila_estandar(row_idx, row, config, reemplazar):
     # Crear usuario si no existe
     username = str(dni_alumno)
     if not User.objects.filter(username=username).exists():
-        user = User.objects.create_user(
+        user = User.objects.create(
             username=username,
-            password=config.password_default,
+            password=hashed_default_pwd,
             first_name=nombres,
             last_name=apellido
         )
