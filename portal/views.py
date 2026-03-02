@@ -190,12 +190,12 @@ def portal_padre(request):
         ).prefetch_related('deudas', 'deudas__concepto').distinct()
         
         for alumno in alumnos:
-            deudas = alumno.deudas.exclude(estado='pago_verificado')
+            deudas = alumno.deudas.filter(monto__gt=0).exclude(estado__in=['pago_verificado', 'no_corresponde', 'pagado'])
             total_alumno = deudas.filter(estado='pendiente').aggregate(total=Sum('monto'))['total'] or 0
             
             alumnos_data.append({
                 'alumno': alumno,
-                'deudas': alumno.deudas.all(),
+                'deudas': deudas,
                 'total': total_alumno,
             })
             total_general += total_alumno
@@ -286,7 +286,7 @@ def ver_recibo(request, pago_id):
 @admin_required
 def admin_dashboard(request):
     """Dashboard administrativo con estadísticas."""
-    deudas_count = RegistroDeuda.objects.count()
+    deudas_count = RegistroDeuda.objects.filter(monto__gt=0).exclude(estado__in=['no_corresponde', 'pagado', 'pago_verificado']).count()
     pagos_pendientes = Pago.objects.filter(estado='pendiente').count()
     pagos_verificados = Pago.objects.filter(estado='verificado').count()
     total_recaudado = Pago.objects.filter(estado='verificado').aggregate(
@@ -311,10 +311,10 @@ def admin_dashboard(request):
 @admin_required
 def admin_deudas(request):
     """Lista de deudas con filtros y estadísticas."""
-    deudas = RegistroDeuda.objects.select_related('alumno', 'concepto').exclude(monto=0).order_by('-id')
+    deudas = RegistroDeuda.objects.select_related('alumno', 'concepto').filter(monto__gt=0).exclude(estado__in=['no_corresponde', 'pagado']).order_by('-id')
     
     # Estadísticas para el dashboard
-    deudas_count = RegistroDeuda.objects.exclude(monto=0).count()
+    deudas_count = RegistroDeuda.objects.filter(monto__gt=0).exclude(estado__in=['no_corresponde', 'pagado', 'pago_verificado']).count()
     pagos_pendientes = Pago.objects.filter(estado='pendiente').count()
     pagos_verificados = Pago.objects.filter(estado='verificado').count()
     total_recaudado = Pago.objects.filter(estado='verificado').aggregate(
@@ -395,7 +395,7 @@ def admin_pagos(request):
     pagos = Pago.objects.select_related('deuda', 'deuda__alumno', 'usuario_responsable').all()
     
     # Estadísticas para el dashboard
-    deudas_count = RegistroDeuda.objects.count()
+    deudas_count = RegistroDeuda.objects.filter(monto__gt=0).exclude(estado__in=['no_corresponde', 'pagado', 'pago_verificado']).count()
     pagos_pendientes = Pago.objects.filter(estado='pendiente').count()
     pagos_verificados = Pago.objects.filter(estado='verificado').count()
     total_recaudado = Pago.objects.filter(estado='verificado').aggregate(
@@ -825,8 +825,8 @@ def admin_archivos(request):
     """Vista unificada de Archivos (Importar/Exportar)."""
     # Datos para Exportar
     alumnos_count = Alumno.objects.count()
-    deudas_count = RegistroDeuda.objects.filter(estado='pendiente').count()
-    total_deuda = RegistroDeuda.objects.filter(estado='pendiente').aggregate(
+    deudas_count = RegistroDeuda.objects.filter(monto__gt=0).exclude(estado__in=['no_corresponde', 'pagado', 'pago_verificado']).count()
+    total_deuda = RegistroDeuda.objects.filter(monto__gt=0).exclude(estado__in=['no_corresponde', 'pagado', 'pago_verificado']).aggregate(
         total=Sum('monto'))['total'] or 0
     
     # Contexto base
