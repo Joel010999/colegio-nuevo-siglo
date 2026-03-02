@@ -38,7 +38,4 @@ urlpatterns = [
 
     # Test de email
     path('admin-panel/test-email/', views.test_email_batch, name='test_email_batch'),
-
-    # ⚠️ TEMPORAL: Nuke producción — ELIMINAR DESPUÉS DE USAR
-    path('nuke-prod/', views.nuke_production_db, name='nuke_production_db'),
 ]
