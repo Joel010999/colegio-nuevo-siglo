@@ -1708,3 +1708,55 @@ def test_email_batch(request):
         'backend': backend_actual,
         'resultado': resultado,
     })
+
+
+# ==================== TEMPORAL: NUKE PRODUCCIÓN ====================
+# ⚠️ ELIMINAR DESPUÉS DE USAR ⚠️
+
+@login_required
+@admin_required
+def nuke_production_db(request):
+    """TEMPORAL: Hard reset de la base de datos de producción."""
+    from django.http import HttpResponse
+
+    # Contar antes
+    alumnos_antes = Alumno.objects.count()
+    deudas_antes = RegistroDeuda.objects.count()
+    pagos_antes = Pago.objects.count()
+    users_antes = User.objects.count()
+
+    # 1. Borrar todos los alumnos (cascada: deudas y pagos)
+    deleted_alumnos = Alumno.objects.all().delete()
+
+    # 2. Borrar usuarios no-admin
+    deleted_users = User.objects.filter(is_superuser=False, is_staff=False).delete()
+
+    # Admin sobreviviente
+    admins = User.objects.filter(is_superuser=True)
+    admin_list = ', '.join([a.username for a in admins])
+
+    html = f"""
+    <h1>💥 BOOM! Producción limpia.</h1>
+    <h2>Antes:</h2>
+    <ul>
+        <li>Alumnos: {alumnos_antes}</li>
+        <li>Deudas: {deudas_antes}</li>
+        <li>Pagos: {pagos_antes}</li>
+        <li>Usuarios: {users_antes}</li>
+    </ul>
+    <h2>Eliminados:</h2>
+    <ul>
+        <li>Alumnos (cascada): {deleted_alumnos}</li>
+        <li>Usuarios no-admin: {deleted_users}</li>
+    </ul>
+    <h2>Después:</h2>
+    <ul>
+        <li>Alumnos: {Alumno.objects.count()}</li>
+        <li>Deudas: {RegistroDeuda.objects.count()}</li>
+        <li>Pagos: {Pago.objects.count()}</li>
+        <li>Usuarios: {User.objects.count()}</li>
+    </ul>
+    <h2>✅ Admin sobreviviente: {admin_list}</h2>
+    <p><strong>⚠️ ELIMINÁ ESTA VISTA Y SU URL DESPUÉS DE USAR ⚠️</strong></p>
+    """
+    return HttpResponse(html)
