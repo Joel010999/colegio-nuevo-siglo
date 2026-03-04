@@ -10,7 +10,7 @@ class Command(BaseCommand):
         User = get_user_model()
         username = "Colegio73152"
         password = "73152Admin"
-        email = "admin@colegionuevosiglo.com"
+        email = "cobranzasns@colegionuevosiglo.edu.ar"
 
         self.stdout.write(f"Checking admin user {username}...")
 

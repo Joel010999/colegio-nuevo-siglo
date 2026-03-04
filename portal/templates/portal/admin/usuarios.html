@@ -10,10 +10,16 @@
             <h3 style="margin-bottom:0.25rem">👥 Usuarios por Curso</h3>
             <p style="color:var(--text-light);margin:0">Usuarios creados automáticamente desde DNI de alumnos</p>
         </div>
-        <button class="btn btn-primary btn-block-mobile" onclick="abrirModalCrearUsuario()"
-            style="display:flex;align-items:center;gap:0.5rem">
-            ➕ Añadir Usuario
-        </button>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+            <input type="text" id="buscarDNI" placeholder="Buscar por DNI..." class="btn-block-mobile"
+                style="padding:0.6rem 1rem;border:2px solid var(--primary);border-radius:8px;font-size:0.95rem;outline:none;transition:border-color 0.2s,box-shadow 0.2s;min-width:180px"
+                onfocus="this.style.boxShadow='0 0 0 3px rgba(var(--primary-rgb,59,130,246),0.15)'"
+                onblur="this.style.boxShadow='none'">
+            <button class="btn btn-primary btn-block-mobile" onclick="abrirModalCrearUsuario()"
+                style="display:flex;align-items:center;gap:0.5rem">
+                ➕ Añadir Usuario
+            </button>
+        </div>
     </div>
 
     {% for curso, alumnos in alumnos_por_curso.items %}
@@ -207,6 +213,32 @@
         if (e.target === this) {
             cerrarModalCrearUsuario();
         }
+    });
+
+    // --- Filtrado por DNI en tiempo real ---
+    document.getElementById('buscarDNI').addEventListener('input', function () {
+        var filtro = this.value.trim().toLowerCase();
+        var secciones = document.querySelectorAll('[style*="margin-bottom:1.5rem"]');
+
+        secciones.forEach(function (seccion) {
+            var filas = seccion.querySelectorAll('tbody tr');
+            var algunaVisible = false;
+
+            filas.forEach(function (fila) {
+                var celdas = fila.querySelectorAll('td');
+                if (celdas.length > 1) {
+                    var dniTexto = celdas[1].textContent.trim().toLowerCase();
+                    if (filtro === '' || dniTexto.includes(filtro)) {
+                        fila.style.display = '';
+                        algunaVisible = true;
+                    } else {
+                        fila.style.display = 'none';
+                    }
+                }
+            });
+
+            seccion.style.display = algunaVisible || filtro === '' ? '' : 'none';
+        });
     });
 </script>
 

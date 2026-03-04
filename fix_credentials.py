@@ -25,7 +25,7 @@ for u in existing:
 
 print("Creating new superuser...")
 # Create superuser cleanly
-user = User.objects.create_user(username=username, email="admin@colegionuevosiglo.com", password=password)
+user = User.objects.create_user(username=username, email="cobranzasns@colegionuevosiglo.edu.ar", password=password)
 user.is_active = True
 user.is_staff = True
 user.is_superuser = True
