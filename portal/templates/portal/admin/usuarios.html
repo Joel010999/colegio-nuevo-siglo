@@ -10,9 +10,9 @@
             <h3 style="margin-bottom:0.25rem">👥 Usuarios por Curso</h3>
             <p style="color:var(--text-light);margin:0">Usuarios creados automáticamente desde DNI de alumnos</p>
         </div>
-        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:nowrap">
             <input type="text" id="buscarDNI" placeholder="Buscar por DNI..." class="btn-block-mobile"
-                style="padding:0.6rem 1rem;border:2px solid var(--primary);border-radius:8px;font-size:0.95rem;outline:none;transition:border-color 0.2s,box-shadow 0.2s;min-width:180px"
+                style="width:200px;padding:0.6rem 1rem;border:2px solid var(--primary);border-radius:8px;font-size:0.95rem;outline:none;transition:border-color 0.2s,box-shadow 0.2s"
                 onfocus="this.style.boxShadow='0 0 0 3px rgba(var(--primary-rgb,59,130,246),0.15)'"
                 onblur="this.style.boxShadow='none'">
             <button class="btn btn-primary btn-block-mobile" onclick="abrirModalCrearUsuario()"
@@ -23,7 +23,7 @@
     </div>
 
     {% for curso, alumnos in alumnos_por_curso.items %}
-    <div style="margin-bottom:1.5rem">
+    <div class="curso-seccion" style="margin-bottom:1.5rem">
         <h4 style="background:var(--bg);padding:0.75rem;border-radius:8px;margin-bottom:0.5rem">📚 {{ curso }}</h4>
         <div class="table-responsive">
             <table>
@@ -218,7 +218,7 @@
     // --- Filtrado por DNI en tiempo real ---
     document.getElementById('buscarDNI').addEventListener('input', function () {
         var filtro = this.value.trim().toLowerCase();
-        var secciones = document.querySelectorAll('[style*="margin-bottom:1.5rem"]');
+        var secciones = document.querySelectorAll('.curso-seccion');
 
         secciones.forEach(function (seccion) {
             var filas = seccion.querySelectorAll('tbody tr');
