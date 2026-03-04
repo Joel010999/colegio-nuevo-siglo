@@ -11,7 +11,7 @@
             <p style="color:var(--text-light);margin:0">Usuarios creados automáticamente desde DNI de alumnos</p>
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:nowrap">
-            <input type="text" id="buscarDNI" placeholder="Buscar por DNI..." class="btn-block-mobile"
+            <input type="text" id="buscarDNI" placeholder="Buscar por DNI..."
                 style="width:200px;padding:0.6rem 1rem;border:2px solid var(--primary);border-radius:8px;font-size:0.95rem;outline:none;transition:border-color 0.2s,box-shadow 0.2s"
                 onfocus="this.style.boxShadow='0 0 0 3px rgba(var(--primary-rgb,59,130,246),0.15)'"
                 onblur="this.style.boxShadow='none'">
@@ -226,8 +226,11 @@
 
             filas.forEach(function (fila) {
                 var celdas = fila.querySelectorAll('td');
-                if (celdas.length > 1) {
+                // Asegurarse de que exista la columna del DNI (índice 1)
+                if (celdas.length >= 2) {
+                    // textContent saca el texto limpio, ignorando la etiqueta <code>
                     var dniTexto = celdas[1].textContent.trim().toLowerCase();
+
                     if (filtro === '' || dniTexto.includes(filtro)) {
                         fila.style.display = '';
                         algunaVisible = true;
@@ -237,7 +240,8 @@
                 }
             });
 
-            seccion.style.display = algunaVisible || filtro === '' ? '' : 'none';
+            // Ocultar todo el bloque del curso si no hay coincidencias
+            seccion.style.display = (algunaVisible || filtro === '') ? '' : 'none';
         });
     });
 </script>
