@@ -82,7 +82,7 @@
     </div>
     {% endfor %}
 </div>
-<!-- Modal Reset Password -->
+
 <div id="modalResetPassword" class="modal-overlay">
     <div class="modal">
         <div class="modal-header">
@@ -100,7 +100,6 @@
     </div>
 </div>
 
-<!-- Modal Forzar Cambio -->
 <div id="modalForzarCambio" class="modal-overlay">
     <div class="modal">
         <div class="modal-header">
@@ -119,134 +118,6 @@
     </div>
 </div>
 
-<script>
-    function abrirModalResetPassword(url) {
-        document.getElementById('btnConfirmReset').href = url;
-        openModal('modalResetPassword');
-    }
-
-    let perfilIdToForce = null;
-    function abrirModalForzarCambio(perfilId) {
-        perfilIdToForce = perfilId;
-        openModal('modalForzarCambio');
-    }
-
-    function confirmarForzarCambio() {
-        if (!perfilIdToForce) return;
-
-        closeModal('modalForzarCambio');
-        showAlert('⏳ Procesando solicitud...', 'info');
-
-        fetch('/admin-panel/forzar-cambio-password/' + perfilIdToForce + '/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}',
-                'Content-Type': 'application/json'
-            }
-        })
-            .then(function (response) { return response.json(); })
-            .then(function (data) {
-                if (data.success) {
-                    showAlert('✅ Se marcó al usuario para cambiar contraseña', 'success');
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showAlert('❌ Error: ' + data.error, 'error');
-                }
-            })
-            .catch(function (error) {
-                showAlert('❌ Error al procesar la solicitud', 'error');
-            });
-    }
-
-    function abrirModalCrearUsuario() {
-        document.getElementById('modalCrearUsuario').style.display = 'flex';
-    }
-
-    function cerrarModalCrearUsuario() {
-        document.getElementById('modalCrearUsuario').style.display = 'none';
-        document.getElementById('formCrearUsuario').reset();
-    }
-
-    function guardarNuevoUsuario(event) {
-        event.preventDefault();
-
-        var form = document.getElementById('formCrearUsuario');
-        var formData = new FormData(form);
-        var data = {};
-        formData.forEach(function (value, key) {
-            data[key] = value;
-        });
-
-        var btnGuardar = document.getElementById('btnGuardarUsuario');
-        btnGuardar.disabled = true;
-        btnGuardar.textContent = 'Guardando...';
-
-        fetch('{% url "portal:admin_crear_alumno" %}', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        })
-            .then(function (response) { return response.json(); })
-            .then(function (data) {
-                if (data.success) {
-                    cerrarModalCrearUsuario();
-                    showAlert(`✅ Usuario creado exitosamente.<br><b>Usuario:</b> ${data.dni}<br><b>Contraseña:</b> ${data.password_default}`, 'success');
-                    setTimeout(() => location.reload(), 3000);
-                } else {
-                    showAlert('❌ Error: ' + data.error, 'error');
-                    btnGuardar.disabled = false;
-                    btnGuardar.textContent = 'Guardar';
-                }
-            })
-            .catch(function (error) {
-                showAlert('❌ Error al procesar la solicitud', 'error');
-                btnGuardar.disabled = false;
-                btnGuardar.textContent = 'Guardar';
-            });
-    }
-
-    // Cerrar modal al hacer click fuera
-    document.getElementById('modalCrearUsuario').addEventListener('click', function (e) {
-        if (e.target === this) {
-            cerrarModalCrearUsuario();
-        }
-    });
-
-    // --- Filtrado por DNI en tiempo real ---
-    document.getElementById('buscarDNI').addEventListener('input', function () {
-        var filtro = this.value.trim().toLowerCase();
-        var secciones = document.querySelectorAll('.curso-seccion');
-
-        secciones.forEach(function (seccion) {
-            var filas = seccion.querySelectorAll('tbody tr');
-            var algunaVisible = false;
-
-            filas.forEach(function (fila) {
-                var celdas = fila.querySelectorAll('td');
-                // Asegurarse de que exista la columna del DNI (índice 1)
-                if (celdas.length >= 2) {
-                    // textContent saca el texto limpio, ignorando la etiqueta <code>
-                    var dniTexto = celdas[1].textContent.trim().toLowerCase();
-
-                    if (filtro === '' || dniTexto.includes(filtro)) {
-                        fila.style.display = '';
-                        algunaVisible = true;
-                    } else {
-                        fila.style.display = 'none';
-                    }
-                }
-            });
-
-            // Ocultar todo el bloque del curso si no hay coincidencias
-            seccion.style.display = (algunaVisible || filtro === '') ? '' : 'none';
-        });
-    });
-</script>
-
-<!-- Modal Crear Usuario -->
 <div id="modalCrearUsuario"
     style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;justify-content:center;align-items:center;">
     <div
@@ -366,4 +237,139 @@
         </form>
     </div>
 </div>
+
+<script>
+    function abrirModalResetPassword(url) {
+        document.getElementById('btnConfirmReset').href = url;
+        openModal('modalResetPassword');
+    }
+
+    let perfilIdToForce = null;
+    function abrirModalForzarCambio(perfilId) {
+        perfilIdToForce = perfilId;
+        openModal('modalForzarCambio');
+    }
+
+    function confirmarForzarCambio() {
+        if (!perfilIdToForce) return;
+
+        closeModal('modalForzarCambio');
+        showAlert('⏳ Procesando solicitud...', 'info');
+
+        fetch('/admin-panel/forzar-cambio-password/' + perfilIdToForce + '/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    showAlert('✅ Se marcó al usuario para cambiar contraseña', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showAlert('❌ Error: ' + data.error, 'error');
+                }
+            })
+            .catch(function (error) {
+                showAlert('❌ Error al procesar la solicitud', 'error');
+            });
+    }
+
+    function abrirModalCrearUsuario() {
+        document.getElementById('modalCrearUsuario').style.display = 'flex';
+    }
+
+    function cerrarModalCrearUsuario() {
+        document.getElementById('modalCrearUsuario').style.display = 'none';
+        document.getElementById('formCrearUsuario').reset();
+    }
+
+    function guardarNuevoUsuario(event) {
+        event.preventDefault();
+
+        var form = document.getElementById('formCrearUsuario');
+        var formData = new FormData(form);
+        var data = {};
+        formData.forEach(function (value, key) {
+            data[key] = value;
+        });
+
+        var btnGuardar = document.getElementById('btnGuardarUsuario');
+        btnGuardar.disabled = true;
+        btnGuardar.textContent = 'Guardando...';
+
+        fetch('{% url "portal:admin_crear_alumno" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    cerrarModalCrearUsuario();
+                    showAlert(`✅ Usuario creado exitosamente.<br><b>Usuario:</b> ${data.dni}<br><b>Contraseña:</b> ${data.password_default}`, 'success');
+                    setTimeout(() => location.reload(), 3000);
+                } else {
+                    showAlert('❌ Error: ' + data.error, 'error');
+                    btnGuardar.disabled = false;
+                    btnGuardar.textContent = 'Guardar';
+                }
+            })
+            .catch(function (error) {
+                showAlert('❌ Error al procesar la solicitud', 'error');
+                btnGuardar.disabled = false;
+                btnGuardar.textContent = 'Guardar';
+            });
+    }
+
+    // Cerrar modal al hacer click fuera
+    document.getElementById('modalCrearUsuario').addEventListener('click', function (e) {
+        if (e.target === this) {
+            cerrarModalCrearUsuario();
+        }
+    });
+
+    // --- Filtrado por DNI en tiempo real (BLINDADO) ---
+    var buscadorInput = document.getElementById('buscarDNI');
+    if (buscadorInput) {
+        buscadorInput.addEventListener('input', function (e) {
+            // Limpiamos los espacios vacíos del input por las dudas
+            var filtro = e.target.value.replace(/\s+/g, '').toLowerCase();
+            var secciones = document.querySelectorAll('.curso-seccion');
+
+            secciones.forEach(function (seccion) {
+                var tbody = seccion.querySelector('tbody');
+                if (!tbody) return;
+
+                var filas = tbody.querySelectorAll('tr');
+                var visibles = 0;
+
+                filas.forEach(function (fila) {
+                    var celdas = fila.querySelectorAll('td');
+                    if (celdas.length >= 2) {
+                        // Agarramos el texto ignorando las etiquetas HTML
+                        var dniTexto = celdas[1].textContent || celdas[1].innerText;
+                        // Le sacamos cualquier salto de línea o espacio fantasma
+                        dniTexto = dniTexto.replace(/\s+/g, '').toLowerCase();
+
+                        if (filtro === '' || dniTexto.includes(filtro)) {
+                            fila.style.display = '';
+                            visibles++;
+                        } else {
+                            fila.style.display = 'none';
+                        }
+                    }
+                });
+
+                // Si no hay ningún alumno visible en este curso, ocultamos todo el bloque
+                seccion.style.display = (visibles > 0 || filtro === '') ? '' : 'none';
+            });
+        });
+    }
+</script>
 {% endblock %}
