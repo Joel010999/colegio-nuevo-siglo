@@ -106,6 +106,22 @@
             <span>Subtotal pendiente:</span>
             <strong style="font-size:1.25rem;color:var(--primary)">${{ data.total|floatformat:0|default:"0" }}</strong>
         </div>
+
+        <!-- Botones de Contacto -->
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem; justify-content: center;">
+            <a href="https://wa.me/5493516336428" target="_blank" class="btn"
+                style="background-color: #25D366; color: white; display: flex; align-items: center; gap: 0.5rem; text-decoration: none;">
+                🟢 WhatsApp
+            </a>
+            <a href="https://instagram.com/centroeducativonuevosiglo" target="_blank" class="btn"
+                style="background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); color: white; display: flex; align-items: center; gap: 0.5rem; text-decoration: none;">
+                📷 Instagram
+            </a>
+            <a href="https://colegionuevosiglo.edu.ar/" target="_blank" class="btn"
+                style="background-color: var(--primary); color: white; display: flex; align-items: center; gap: 0.5rem; text-decoration: none;">
+                🌐 Página Web
+            </a>
+        </div>
     </div>
     {% endfor %}
     {% else %}

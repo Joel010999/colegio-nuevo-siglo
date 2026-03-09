@@ -27,25 +27,34 @@
     <h3 style="margin-bottom:1rem">💳 Pagos Registrados</h3>
 
     <!-- Filtros -->
-    <form method="GET" class="filters">
-        <select name="estado" onchange="this.form.submit()">
-            <option value="">Todos</option>
-            <option value="pendiente" {% if estado_filter == 'pendiente' %}selected{% endif %}>Pendiente Verificación
-            </option>
-            <option value="verificado" {% if estado_filter == 'verificado' %}selected{% endif %}>Pago Verificado</option>
-        </select>
-    </form>
+    <div class="filters" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem;">
+        <form method="GET" style="margin:0;">
+            <select name="estado" onchange="this.form.submit()"
+                style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">Todos</option>
+                <option value="pendiente" {% if "pendiente" in estado_filter %}selected{% endif %}>
+                    Pendiente Verificación
+                </option>
+                <option value="verificado" {% if "verificado" in estado_filter %}selected{% endif %}>
+                    Pago Verificado
+                </option>
+            </select>
+        </form>
+        <input type="text" id="buscadorDniPagos" class="form-control" placeholder="Buscar por DNI..."
+            style="max-width: 200px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+        <input type="text" id="buscadorNombrePagos" class="form-control" placeholder="Buscar por Nombre..."
+            style="max-width: 200px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+    </div>
 
     <div class="table-responsive">
         <table>
             <thead>
                 <tr>
-                    <th>Nº Recibo</th>
+                    <th>DNI</th>
                     <th>Fecha</th>
                     <th>Alumno</th>
                     <th>Concepto</th>
                     <th>Monto</th>
-                    <th>Responsable</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                 </tr>
@@ -53,12 +62,11 @@
             <tbody>
                 {% for pago in pagos %}
                 <tr>
-                    <td><strong>{{ pago.numero_operacion }}</strong></td>
+                    <td><strong>{{ pago.deuda.alumno.documento }}</strong></td>
                     <td>{{ pago.fecha_envio|date:"d/m/Y" }}</td>
                     <td>{{ pago.deuda.alumno.nombre_completo }}</td>
                     <td>{{ pago.deuda.concepto.nombre }}</td>
                     <td>${{ pago.monto_pagado|floatformat:0 }}</td>
-                    <td>{{ pago.usuario_responsable.get_full_name|default:pago.usuario_responsable.username }}</td>
                     <td>
                         {% if pago.estado == 'pendiente' %}
                         <span class="badge badge-sent">⏳ Pendiente</span>
@@ -83,7 +91,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8" style="text-align:center;padding:2rem;color:var(--text-light)">
+                    <td colspan="7" style="text-align:center;padding:2rem;color:var(--text-light)">
                         No se encontraron pagos
                     </td>
                 </tr>
@@ -107,4 +115,42 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchDni = document.getElementById('buscadorDniPagos');
+        const searchNombre = document.getElementById('buscadorNombrePagos');
+        const rows = document.querySelectorAll('tbody tr');
+
+        function filterTable() {
+            const termDni = searchDni.value.toLowerCase().trim();
+            const termNombre = searchNombre.value.toLowerCase().trim();
+
+            rows.forEach(row => {
+                // Ignore empty state row
+                if (row.cells.length < 7) return;
+
+                // In Pagos table: DNI isn't explicitly shown, but we can search it within the name column if it's there
+                // Wait, looking at the table, DNI is NOT explicitly in a column. 
+                // The user wants to search by DNI, we either use an attribute or search the name string assuming the name column is "Lastname, Firstname"
+                // Let's add data-dni to the row or just search the text. But we can't add data-dni easily without backend. We'll search the full row text for DNI, and Name column for name.
+                // Actually, we can just search the textContent of the row for DNI, and the Name column (index 2) for Name.
+                const nameCellText = row.cells[2].textContent.toLowerCase();
+                const fullRowText = row.textContent.toLowerCase();
+
+                const matchesDni = termDni === '' || fullRowText.includes(termDni);
+                const matchesNombre = termNombre === '' || nameCellText.includes(termNombre);
+
+                if (matchesDni && matchesNombre) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        if (searchDni) searchDni.addEventListener('keyup', filterTable);
+        if (searchNombre) searchNombre.addEventListener('keyup', filterTable);
+    });
+</script>
 {% endblock %}

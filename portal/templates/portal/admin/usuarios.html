@@ -10,9 +10,13 @@
             <h3 style="margin-bottom:0.25rem">👥 Usuarios por Curso</h3>
             <p style="color:var(--text-light);margin:0">Usuarios creados automáticamente desde DNI de alumnos</p>
         </div>
-        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:nowrap">
-            <input type="text" id="buscarDNI" placeholder="Buscar por DNI..."
-                style="width:200px;padding:0.6rem 1rem;border:2px solid var(--primary);border-radius:8px;font-size:0.95rem;outline:none;transition:border-color 0.2s,box-shadow 0.2s"
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+            <input type="text" id="buscarDNI" class="form-control" placeholder="Buscar por DNI..."
+                style="max-width:200px;padding:0.6rem 1rem;border:2px solid var(--primary);border-radius:8px;font-size:0.95rem;outline:none;transition:border-color 0.2s,box-shadow 0.2s"
+                onfocus="this.style.boxShadow='0 0 0 3px rgba(var(--primary-rgb,59,130,246),0.15)'"
+                onblur="this.style.boxShadow='none'">
+            <input type="text" id="buscadorNombreUsuarios" class="form-control" placeholder="Buscar por Nombre..."
+                style="max-width:200px;padding:0.6rem 1rem;border:2px solid var(--primary);border-radius:8px;font-size:0.95rem;outline:none;transition:border-color 0.2s,box-shadow 0.2s"
                 onfocus="this.style.boxShadow='0 0 0 3px rgba(var(--primary-rgb,59,130,246),0.15)'"
                 onblur="this.style.boxShadow='none'">
             <button class="btn btn-primary btn-block-mobile" onclick="abrirModalCrearUsuario()"
@@ -334,42 +338,52 @@
         }
     });
 
-    // --- Filtrado por DNI en tiempo real (BLINDADO) ---
-    var buscadorInput = document.getElementById('buscarDNI');
-    if (buscadorInput) {
-        buscadorInput.addEventListener('input', function (e) {
-            // Limpiamos los espacios vacíos del input por las dudas
-            var filtro = e.target.value.replace(/\s+/g, '').toLowerCase();
-            var secciones = document.querySelectorAll('.curso-seccion');
+    // --- Filtrado por DNI y Nombre en tiempo real (BLINDADO) ---
+    var buscadorInputDni = document.getElementById('buscarDNI');
+    var buscadorInputNombre = document.getElementById('buscadorNombreUsuarios');
 
-            secciones.forEach(function (seccion) {
-                var tbody = seccion.querySelector('tbody');
-                if (!tbody) return;
+    function aplicarFiltros() {
+        var filtroDni = buscadorInputDni ? buscadorInputDni.value.replace(/\s+/g, '').toLowerCase() : '';
+        var filtroNombre = buscadorInputNombre ? buscadorInputNombre.value.toLowerCase().trim() : '';
+        var secciones = document.querySelectorAll('.curso-seccion');
 
-                var filas = tbody.querySelectorAll('tr');
-                var visibles = 0;
+        secciones.forEach(function (seccion) {
+            var tbody = seccion.querySelector('tbody');
+            if (!tbody) return;
 
-                filas.forEach(function (fila) {
-                    var celdas = fila.querySelectorAll('td');
-                    if (celdas.length >= 2) {
-                        // Agarramos el texto ignorando las etiquetas HTML
-                        var dniTexto = celdas[1].textContent || celdas[1].innerText;
-                        // Le sacamos cualquier salto de línea o espacio fantasma
-                        dniTexto = dniTexto.replace(/\s+/g, '').toLowerCase();
+            var filas = tbody.querySelectorAll('tr');
+            var visibles = 0;
 
-                        if (filtro === '' || dniTexto.includes(filtro)) {
-                            fila.style.display = '';
-                            visibles++;
-                        } else {
-                            fila.style.display = 'none';
-                        }
+            filas.forEach(function (fila) {
+                var celdas = fila.querySelectorAll('td');
+                if (celdas.length >= 2) {
+                    var nombreTexto = celdas[0].textContent.toLowerCase();
+                    var dniTexto = celdas[1].textContent.replace(/\s+/g, '').toLowerCase();
+
+                    var matchesDni = filtroDni === '' || dniTexto.includes(filtroDni);
+                    var matchesNombre = filtroNombre === '' || nombreTexto.includes(filtroNombre);
+
+                    if (matchesDni && matchesNombre) {
+                        fila.style.display = '';
+                        visibles++;
+                    } else {
+                        fila.style.display = 'none';
                     }
-                });
-
-                // Si no hay ningún alumno visible en este curso, ocultamos todo el bloque
-                seccion.style.display = (visibles > 0 || filtro === '') ? '' : 'none';
+                }
             });
+
+            // Si no hay ningún alumno visible en este curso, ocultamos todo el bloque
+            seccion.style.display = (visibles > 0 || (filtroDni === '' && filtroNombre === '')) ? '' : 'none';
         });
+    }
+
+    if (buscadorInputDni) {
+        buscadorInputDni.addEventListener('input', aplicarFiltros);
+        buscadorInputDni.addEventListener('keyup', aplicarFiltros);
+    }
+    if (buscadorInputNombre) {
+        buscadorInputNombre.addEventListener('input', aplicarFiltros);
+        buscadorInputNombre.addEventListener('keyup', aplicarFiltros);
     }
 </script>
 {% endblock %}
