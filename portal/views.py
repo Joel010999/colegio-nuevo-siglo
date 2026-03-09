@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.db.models import Q, Sum, Count
@@ -1607,6 +1607,29 @@ def admin_auditoria(request):
     
     return render(request, 'portal/admin/auditoria.html', context)
 
+
+@user_passes_test(lambda u: u.is_superuser)
+def reset_database_nuclear(request):
+    try:
+        # Borrado en orden para respetar claves foráneas
+        Pago.objects.all().delete()
+        RegistroDeuda.objects.all().delete()
+        ConceptoDeuda.objects.all().delete()
+        Alumno.objects.all().delete()
+        
+        # Borrar usuarios normales (padres), preservando superusuarios y staff
+        User.objects.filter(is_superuser=False, is_staff=False).delete()
+        
+        return HttpResponse('''
+            <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+                <h1 style="color: #2ecc71;">✅ Base de datos aniquilada con éxito</h1>
+                <p>Todo el sistema está limpio. Las columnas viejas y los usuarios de prueba fueron eliminados.</p>
+                <p>El administrador principal sigue intacto.</p>
+                <a href="/admin-panel/" style="padding: 10px 20px; background: #3498db; color: white; text-decoration: none; border-radius: 5px;">Volver al Panel Admin</a>
+            </div>
+        ''')
+    except Exception as e:
+        return HttpResponse(f"<h1 style='color: red;'>❌ Error al limpiar:</h1><p>{str(e)}</p>")
 
 # ==================== VISTAS PÚBLICAS (consulta sin login) ====================
 
