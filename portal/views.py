@@ -190,7 +190,7 @@ def portal_padre(request):
         ).prefetch_related('deudas', 'deudas__concepto').distinct()
         
         for alumno in alumnos:
-            total_alumno = alumno.deudas.filter(estado='pendiente', monto__gt=0).aggregate(total=Sum('monto'))['total'] or 0
+            total_alumno = alumno.deudas.filter(estado__in=['pendiente', 'parcial'], monto__gt=0).aggregate(total=Sum('monto'))['total'] or 0
             deudas_mostrar = alumno.deudas.exclude(estado='no_corresponde').order_by('concepto__orden')
             
             alumnos_data.append({
@@ -1644,8 +1644,7 @@ def consulta_publica(request):
                 total_general = 0
                 
                 for alumno in alumnos:
-                    deudas_pendientes = alumno.deudas.filter(estado='pendiente')
-                    total_alumno = deudas_pendientes.aggregate(total=Sum('monto'))['total'] or 0
+                    total_alumno = alumno.deudas.filter(estado__in=['pendiente', 'parcial'], monto__gt=0).aggregate(total=Sum('monto'))['total'] or 0
                     
                     alumnos_data.append({
                         'alumno': alumno,

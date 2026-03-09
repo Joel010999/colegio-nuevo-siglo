@@ -211,8 +211,17 @@ class Pago(models.Model):
         self.usuario_verificador = usuario
         self.save()
         
-        # Actualizar estado de la deuda
-        self.deuda.estado = 'pago_verificado'
+        # --- LÓGICA DE PAGO PARCIAL ---
+        # Si la plata enviada cubre (o supera) el saldo total de la deuda
+        if self.monto_pagado >= self.deuda.monto:
+            self.deuda.estado = 'pago_verificado'
+            self.deuda.monto = 0
+        else:
+            # Si es un pago parcial, le descontamos la plata y cambiamos el estado
+            self.deuda.monto -= self.monto_pagado
+            self.deuda.estado = 'parcial'
+            
+        # Registramos la fecha de este último movimiento
         self.deuda.fecha_pago = timezone.now().date()
         self.deuda.save()
 
