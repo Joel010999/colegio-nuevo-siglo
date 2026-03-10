@@ -75,7 +75,7 @@
                             <span class="badge badge-pending" style="background:#e67e22; color:white;">⏳ Pago
                                 Parcial</span>
                             {% elif deuda.estado == 'comprobante_enviado' %}
-                            <span class="badge badge-sent">📤 Comprobante Enviado</span>
+                            <span class="badge" style="background:#3498db; color:white;">📤 Esperando Aprobación</span>
                             {% elif deuda.estado == 'pago_verificado' %}
                             <span class="badge badge-verified">✅ Pago Verificado</span>
                             {% else %}
@@ -260,33 +260,33 @@
         var wrapper = document.getElementById('montoInputWrapper');
         var helpText = document.getElementById('montoHelp');
 
-        // Lógica estricta para Material Didáctico
+        // Lógica dinámica para Material Didáctico
         if (concepto.toLowerCase().includes('material didactico') || concepto.toLowerCase().includes('material didáctico')) {
-            if (montoFloat >= 400000) {
-                // Primera vez: Opción de Total o Cuota
+
+            if (montoFloat > 40000) {
+                // Si debe más de 40.000: Elige entre el total exacto que debe o la cuota de 40.000
                 wrapper.innerHTML = `
                     <select id="monto" name="monto" style="width:100%;padding:0.75rem;border:2px solid var(--primary);border-radius:8px;font-size:1.1rem;font-weight:bold;" required>
-                        <option value="400000">Pago Total ($400.000)</option>
-                        <option value="40000">Pago en Cuotas ($40.000)</option>
+                        <option value="${montoFloat}">Pago Total de Deuda ($${montoFloat.toLocaleString('es-AR')})</option>
+                        <option value="40000">Pago en Cuota ($40.000)</option>
                     </select>
                 `;
-                helpText.textContent = "Para este concepto, seleccione si desea abonar el monto total o en cuotas fijas.";
+                helpText.textContent = "Seleccione si desea liquidar el saldo total pendiente o abonar una cuota de $40.000.";
             } else {
-                // Pagos subsiguientes: Cuota fijada
-                var cuota = (montoFloat < 40000) ? montoFloat : 40000;
+                // Si debe 40.000 o menos: Está obligado a pagar el saldo restante completo
                 wrapper.innerHTML = `
-                    <input type="number" id="monto" name="monto" value="${cuota}" readonly 
+                    <input type="number" id="monto" name="monto" value="${montoFloat}" readonly 
                            style="width:100%;padding:0.75rem;border:2px solid #ccc;border-radius:8px;font-size:1.1rem;font-weight:bold;background-color:#f0f0f0;cursor:not-allowed;" required>
                 `;
-                helpText.textContent = "El monto de la siguiente cuota está fijado por el sistema en $40.000.";
+                helpText.textContent = "El saldo pendiente es igual o menor a una cuota. Debe liquidar el monto restante.";
             }
         } else {
             // Comportamiento normal para otros conceptos
             wrapper.innerHTML = `
-                <input type="number" step="0.01" id="monto" name="monto" value="${montoFloat}" max="${montoFloat}" 
-                       style="width:100%;padding:0.75rem;border:2px solid var(--primary);border-radius:8px;font-size:1.1rem;font-weight:bold;" required>
+                <input type="number" step="0.01" id="monto" name="monto" value="${montoFloat}" max="${montoFloat}" readonly 
+                       style="width:100%;padding:0.75rem;border:2px solid #ccc;border-radius:8px;font-size:1.1rem;font-weight:bold;background-color:#f0f0f0;cursor:not-allowed;" required>
             `;
-            helpText.textContent = "Puede modificar este monto si desea realizar un pago parcial.";
+            helpText.textContent = "El pago debe realizarse por el total adeudado de este concepto.";
         }
 
         document.getElementById('filePreview').classList.add('hidden');
@@ -321,20 +321,25 @@
                     closeModal('paymentModal');
 
                     // Actualizar el estado en la tabla
-                    var buttons = document.querySelectorAll('button[onclick*="openPaymentModal"]');
+                    var buttons = document.querySelectorAll('.btn-abrir-pago');
                     buttons.forEach(function (btn) {
-                        if (btn.onclick.toString().includes("'" + currentDeudaId + "'")) {
+                        if (btn.getAttribute('data-id') == currentDeudaId) {
                             var row = btn.closest('tr');
                             if (row) {
-                                // Actualizar la celda de estado
-                                var estadoCell = row.querySelector('td:nth-child(3)');
+                                // Actualizar la celda de estado (Columna 2)
+                                var estadoCell = row.querySelector('td:nth-child(2)');
                                 if (estadoCell) {
-                                    estadoCell.innerHTML = '<span class="badge badge-sent">📤 Comprobante Enviado</span>';
+                                    estadoCell.innerHTML = '<span class="badge" style="background:#3498db; color:white;">📤 Esperando Aprobación</span>';
                                 }
-                                // Reemplazar botón de pagar por botón de ver recibo
-                                var accionCell = row.querySelector('td:nth-child(4)');
+                                // Reemplazar botón de pagar por botón de ver recibo (Columna 3)
+                                var accionCell = row.querySelector('td:nth-child(3)');
                                 if (accionCell && data.recibo_url) {
-                                    accionCell.innerHTML = '<a href="' + data.recibo_url + '" class="btn btn-outline btn-sm">🧾 Ver Recibo</a>';
+                                    // Remove the pay button natively without destroying the history button
+                                    const payBtn = accionCell.querySelector('.btn-abrir-pago');
+                                    if (payBtn) payBtn.remove();
+
+                                    // Add the "Ver Recibo" button
+                                    accionCell.insertAdjacentHTML('afterbegin', '<a href="' + data.recibo_url + '" class="btn btn-outline btn-sm">🧾 Ver Recibo</a>');
                                 }
                             }
                         }

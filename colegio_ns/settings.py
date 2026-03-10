@@ -50,7 +50,9 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'cloudinary_storage',
     'django.contrib.staticfiles',
+    'cloudinary',
     'anymail',  # django-anymail para Resend API
     'portal',  # App del portal de padres
 ]
@@ -168,3 +170,12 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 # Static files configuration for production
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Configuración de Cloudinary
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME', 'tu_cloud_name_local'),
+    'API_KEY': os.environ.get('CLOUDINARY_API_KEY', 'tu_api_key_local'),
+    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET', 'tu_api_secret_local')
+}

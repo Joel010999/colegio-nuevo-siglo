@@ -206,6 +206,10 @@ class Pago(models.Model):
     
     def verificar(self, usuario):
         """Marca el pago como verificado y actualiza la deuda asociada."""
+        # ESCUDO ANTI-DOBLE EJECUCIÓN: Si el pago ya fue verificado, cortamos la función acá.
+        if self.estado == 'verificado':
+            return
+            
         self.estado = 'verificado'
         self.fecha_verificacion = timezone.now()
         self.usuario_verificador = usuario
