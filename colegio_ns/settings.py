@@ -196,6 +196,8 @@ cloudinary.config(
 
 # Evitar crash de collectstatic por archivos faltantes (ej: iconos del admin de Django)
 WHITENOISE_MANIFEST_STRICT = False
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_KEEP_ONLY_HASHED_FILES = False
 
 STORAGES = {
     "default": {
