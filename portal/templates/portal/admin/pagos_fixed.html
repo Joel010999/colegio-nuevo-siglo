@@ -80,8 +80,8 @@
                         <a href="{% url 'portal:admin_verificar_pago' pago.id %}" class="btn btn-sm btn-outline"
                             title="Ver detalle">👁️</a>
                         {% if pago.comprobante %}
-                        <a href="{{ pago.comprobante.url }}" class="btn btn-sm btn-outline" target="_blank"
-                            title="Ver comprobante">📥</a>
+                        <a href="{{ pago.comprobante.url }}" class="btn btn-sm btn-outline"
+                            download="Comprobante_Pago_{{ pago.id }}" target="_blank" title="Ver comprobante">📥</a>
                         {% endif %}
                         {% if pago.estado == 'pendiente' %}
                         <a href="{% url 'portal:admin_verificar_pago' pago.id %}" class="btn btn-sm btn-secondary"

@@ -30,9 +30,9 @@
     <form method="GET" class="filters">
         <select name="estado" onchange="this.form.submit()">
             <option value="">Todos</option>
-            <option value="pendiente" {% if estado_filter == 'pendiente' %}selected{% endif %}>Pendiente Verificación
+            <option value="pendiente" {% if estado_filter=='pendiente' %}selected{% endif %}>Pendiente Verificación
             </option>
-            <option value="verificado" {% if estado_filter == 'verificado' %}selected{% endif %}>Pago Verificado</option>
+            <option value="verificado" {% if estado_filter=='verificado' %}selected{% endif %}>Pago Verificado</option>
         </select>
     </form>
 
@@ -72,8 +72,8 @@
                         <a href="{% url 'portal:admin_verificar_pago' pago.id %}" class="btn btn-sm btn-outline"
                             title="Ver detalle">👁️</a>
                         {% if pago.comprobante %}
-                        <a href="{{ pago.comprobante.url }}" class="btn btn-sm btn-outline" target="_blank"
-                            title="Ver comprobante">📥</a>
+                        <a href="{{ pago.comprobante.url }}" class="btn btn-sm btn-outline"
+                            download="Comprobante_Pago_{{ pago.id }}" target="_blank" title="Ver comprobante">📥</a>
                         {% endif %}
                         {% if pago.estado == 'pendiente' %}
                         <a href="{% url 'portal:admin_verificar_pago' pago.id %}" class="btn btn-sm btn-secondary"
