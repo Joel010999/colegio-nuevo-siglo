@@ -140,7 +140,7 @@ STATICFILES_DIRS = [
 ]
 
 # Media files (uploaded files)
-MEDIA_URL = '/media/'
+MEDIA_URL = ''
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Authentication
@@ -185,7 +185,8 @@ import cloudinary.api
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME'),
     'API_KEY': os.environ.get('CLOUDINARY_API_KEY'),
-    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET')
+    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET'),
+    'SECURE': True
 }
 
 cloudinary.config(
