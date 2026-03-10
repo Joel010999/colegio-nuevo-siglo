@@ -171,6 +171,10 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 
 # Static files configuration for production
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Fix para asegurar la existencia del directorio para WhiteNoise
+if not os.path.exists(STATIC_ROOT):
+    os.makedirs(STATIC_ROOT, exist_ok=True)
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Configuración de Cloudinary
