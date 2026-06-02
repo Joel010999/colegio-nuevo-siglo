@@ -177,7 +177,7 @@ class Pago(models.Model):
     numero_operacion = models.CharField(max_length=50, unique=True, editable=False)
     deuda = models.ForeignKey(RegistroDeuda, on_delete=models.CASCADE, related_name='pagos')
     monto_pagado = models.DecimalField(max_digits=12, decimal_places=2)
-    comprobante = models.ImageField(upload_to='comprobantes/', blank=True, null=True)
+    comprobante = models.FileField(upload_to='comprobantes/', blank=True, null=True)
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
     
     # Fechas

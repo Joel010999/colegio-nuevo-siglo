@@ -58,10 +58,17 @@
     <h4 style="margin:1.5rem 0 1rem">📎 Comprobante:</h4>
     {% if pago.comprobante %}
     <div style="text-align:center">
+        {% if '.pdf' in pago.comprobante.url or '.PDF' in pago.comprobante.url %}
+        <div style="padding:2rem; background:var(--bg); border-radius:12px; border:1px solid var(--border);">
+            <span style="font-size:4rem;">📄</span>
+            <p style="margin-top:1rem; color:var(--text-light); font-weight:500;">Vista previa no disponible para PDF</p>
+        </div>
+        {% else %}
         <img src="{{ pago.comprobante.url }}"
             style="max-width:100%;max-height:400px;border-radius:8px;border:1px solid var(--border)">
+        {% endif %}
         <div style="margin-top: 1rem;">
-            <a href="{{ pago.comprobante.url }}" download="Comprobante_Pago_{{ pago.id }}" target="_blank"
+            <a href="{{ pago.comprobante.url }}" target="_blank"
                 class="btn btn-outline btn-sm">📥 Descargar Comprobante</a>
         </div>
     </div>
