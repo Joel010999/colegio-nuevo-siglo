@@ -30,20 +30,22 @@
     <!-- Filtros -->
     <div class="filters" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem;">
         <form method="GET" style="margin:0;">
+            <input type="hidden" name="dni" value="{{ dni_filter }}">
+            <input type="hidden" name="nombre" value="{{ nombre_filter }}">
             <select name="estado" onchange="this.form.submit()"
                 style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
                 <option value="">Todos</option>
-                <option value="pendiente" {% if "pendiente" in estado_filter %}selected{% endif %}>
+                <option value="pendiente" {% if estado_filter == "pendiente" %}selected{% endif %}>
                     Pendiente Verificación
                 </option>
-                <option value="verificado" {% if "verificado" in estado_filter %}selected{% endif %}>
+                <option value="verificado" {% if estado_filter == "verificado" %}selected{% endif %}>
                     Pago Verificado
                 </option>
             </select>
         </form>
-        <input type="text" id="buscadorDniPagos" class="form-control" placeholder="Buscar por DNI..."
+        <input type="text" id="buscadorDniPagos" class="form-control" placeholder="Buscar por DNI..." value="{{ dni_filter }}"
             style="max-width: 200px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
-        <input type="text" id="buscadorNombrePagos" class="form-control" placeholder="Buscar por Nombre..."
+        <input type="text" id="buscadorNombrePagos" class="form-control" placeholder="Buscar por Apellido..." value="{{ nombre_filter }}"
             style="max-width: 200px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
     </div>
 
@@ -105,12 +107,12 @@
     {% if pagos.has_other_pages %}
     <div style="display:flex;justify-content:center;gap:0.5rem;margin-top:1rem">
         {% if pagos.has_previous %}
-        <a href="?page={{ pagos.previous_page_number }}&estado={{ estado_filter }}" class="btn btn-outline btn-sm">←
+        <a href="?page={{ pagos.previous_page_number }}&estado={{ estado_filter }}&dni={{ dni_filter }}&nombre={{ nombre_filter }}" class="btn btn-outline btn-sm">←
             Anterior</a>
         {% endif %}
         <span style="padding:0.5rem 1rem">Página {{ pagos.number }} de {{ pagos.paginator.num_pages }}</span>
         {% if pagos.has_next %}
-        <a href="?page={{ pagos.next_page_number }}&estado={{ estado_filter }}" class="btn btn-outline btn-sm">Siguiente
+        <a href="?page={{ pagos.next_page_number }}&estado={{ estado_filter }}&dni={{ dni_filter }}&nombre={{ nombre_filter }}" class="btn btn-outline btn-sm">Siguiente
             →</a>
         {% endif %}
     </div>
@@ -155,40 +157,47 @@
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const searchDni = document.getElementById('buscadorDniPagos');
-        const searchNombre = document.getElementById('buscadorNombrePagos');
-        const rows = document.querySelectorAll('tbody tr');
+    // ==================== Filtros de búsqueda (reactivo con retención de foco) ====================
+    let searchTimeout = null;
 
-        function filterTable() {
-            const termDni = searchDni.value.toLowerCase().trim();
-            const termNombre = searchNombre.value.toLowerCase().trim();
+    function debouncedSearchPagos(event) {
+        clearTimeout(searchTimeout);
+        let activeId = event.target.id;
 
-            rows.forEach(row => {
-                // Ignore empty state row
-                if (row.cells.length < 7) return;
+        searchTimeout = setTimeout(function() {
+            let dni = document.getElementById('buscadorDniPagos').value;
+            let nombre = document.getElementById('buscadorNombrePagos').value;
+            // Preservar el filtro de estado actual
+            const urlParams = new URLSearchParams(window.location.search);
+            let estado = urlParams.get('estado') || '';
 
-                // In Pagos table: DNI isn't explicitly shown, but we can search it within the name column if it's there
-                // Wait, looking at the table, DNI is NOT explicitly in a column. 
-                // The user wants to search by DNI, we either use an attribute or search the name string assuming the name column is "Lastname, Firstname"
-                // Let's add data-dni to the row or just search the text. But we can't add data-dni easily without backend. We'll search the full row text for DNI, and Name column for name.
-                // Actually, we can just search the textContent of the row for DNI, and the Name column (index 2) for Name.
-                const nameCellText = row.cells[2].textContent.toLowerCase();
-                const fullRowText = row.textContent.toLowerCase();
+            let params = [];
+            if (dni) params.push('dni=' + encodeURIComponent(dni));
+            if (nombre) params.push('nombre=' + encodeURIComponent(nombre));
+            if (estado) params.push('estado=' + encodeURIComponent(estado));
+            params.push('focus=' + activeId);
 
-                const matchesDni = termDni === '' || fullRowText.includes(termDni);
-                const matchesNombre = termNombre === '' || nameCellText.includes(termNombre);
+            window.location.href = window.location.pathname + '?' + params.join('&');
+        }, 800);
+    }
 
-                if (matchesDni && matchesNombre) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            });
+    document.getElementById('buscadorDniPagos').addEventListener('input', debouncedSearchPagos);
+    document.getElementById('buscadorNombrePagos').addEventListener('input', debouncedSearchPagos);
+
+    // Retención de foco tras recarga
+    document.addEventListener('DOMContentLoaded', function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const focusId = urlParams.get('focus');
+
+        if (focusId) {
+            let inputToFocus = document.getElementById(focusId);
+            if (inputToFocus) {
+                inputToFocus.focus();
+                let val = inputToFocus.value;
+                inputToFocus.value = '';
+                inputToFocus.value = val;
+            }
         }
-
-        if (searchDni) searchDni.addEventListener('keyup', filterTable);
-        if (searchNombre) searchNombre.addEventListener('keyup', filterTable);
     });
 
     function abrirModalRecaudacion() {

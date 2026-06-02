@@ -418,9 +418,17 @@ def admin_pagos(request):
         total=Sum('monto_pagado'))['total'] or 0
     pagos_por_mes = Pago.objects.filter(estado='verificado').annotate(mes=TruncMonth('fecha_envio')).values('mes').annotate(total=Sum('monto_pagado')).order_by('-mes')
     
+    # Filtros
     estado_filter = request.GET.get('estado', '')
+    dni_filter = request.GET.get('dni', '').strip()
+    nombre_filter = request.GET.get('nombre', '').strip()
+
     if estado_filter:
         pagos = pagos.filter(estado=estado_filter)
+    if dni_filter:
+        pagos = pagos.filter(deuda__alumno__documento__icontains=dni_filter)
+    if nombre_filter:
+        pagos = pagos.filter(deuda__alumno__apellido__icontains=nombre_filter)
     
     paginator = Paginator(pagos, 50)
     page = request.GET.get('page', 1)
@@ -429,6 +437,8 @@ def admin_pagos(request):
     context = {
         'pagos': pagos_page,
         'estado_filter': estado_filter,
+        'dni_filter': dni_filter,
+        'nombre_filter': nombre_filter,
         'active_tab': 'pagos',
         # Estadísticas
         'deudas_count': deudas_count,
