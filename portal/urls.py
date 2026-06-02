@@ -21,6 +21,7 @@ urlpatterns = [
     path('admin-panel/', views.admin_deudas, name='admin_dashboard'),
     path('admin-panel/cobro/', views.admin_cobro, name='admin_cobro'),
     path('admin-panel/deudas/', views.admin_deudas, name='admin_deudas'),
+    path('admin-panel/deuda/<int:deuda_id>/cobrar-efectivo/', views.admin_cobrar_efectivo, name='admin_cobrar_efectivo'),
     path('admin-panel/pagos/', views.admin_pagos, name='admin_pagos'),
     path('admin-panel/verificar/<int:pago_id>/', views.admin_verificar_pago, name='admin_verificar_pago'),
     path('admin-panel/usuarios/', views.admin_usuarios, name='admin_usuarios'),

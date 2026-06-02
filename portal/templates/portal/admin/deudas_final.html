@@ -17,117 +17,266 @@
         <h3 style="color:var(--success)">{{ pagos_verificados }}</h3>
         <p>Pagos Verificados</p>
     </div>
-    <div class="stat-card">
+    <div class="stat-card" onclick="abrirModalRecaudacion()" style="cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 10px 15px -3px rgba(139, 30, 63, 0.15)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow)'">
         <h3>${{ total_recaudado|floatformat:0 }}</h3>
         <p>Total Recaudado</p>
+        <span style="font-size: 0.75rem; color: var(--primary); display: block; margin-top: 0.25rem; font-weight: 500;">(Click para ver desglose)</span>
     </div>
 </div>
 
 <div class="card">
     <!-- Filtros -->
-    <form method="GET" class="filters">
-        <!-- Nivel -->
-        <select name="nivel" onchange="this.form.submit()" style="flex:1;min-width:150px">
-            <option value="">Nivel</option>
-            {% for n in niveles %}
-            <option value="{{ n.val }}" {% if n.selected %}selected{% endif %}>{{ n.label }}</option>
-            {% endfor %}
-        </select>
+    <form id="filtroForm" method="GET" style="display: flex; flex-direction: column; gap: 1rem; width: 100%; margin-bottom: 1.5rem;" onsubmit="event.preventDefault();">
+        {% csrf_token %}
+        <!-- Fila Superior (Fila 1): Nivel, Curso, División -->
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <!-- Nivel -->
+            <select name="nivel" style="flex:1;min-width:150px">
+                <option value="">Nivel</option>
+                {% for n in niveles %}
+                <option value="{{ n.val }}" {% if n.selected %}selected{% endif %}>{{ n.label }}</option>
+                {% endfor %}
+            </select>
 
-        <!-- Curso -->
-        <select name="curso" onchange="this.form.submit()" style="flex:1;min-width:150px">
-            <option value="">Curso</option>
-            {% for c in cursos %}
-            <option value="{{ c.val }}" {% if c.selected %}selected{% endif %}>{{ c.label }}</option>
-            {% endfor %}
-        </select>
+            <!-- Curso -->
+            <select name="curso" style="flex:1;min-width:150px">
+                <option value="">Curso</option>
+                {% for c in cursos %}
+                <option value="{{ c.val }}" {% if c.selected %}selected{% endif %}>{{ c.label }}</option>
+                {% endfor %}
+            </select>
 
-        <!-- División -->
-        <select name="division" onchange="this.form.submit()" style="flex:1;min-width:150px">
-            <option value="">División</option>
-            {% for d in divisiones %}
-            <option value="{{ d.val }}" {% if d.selected %}selected{% endif %}>{{ d.label }}</option>
-            {% endfor %}
-        </select>
-
-        <div style="flex:1;min-width:200px;position:relative">
-            <input type="text" name="dni" value="{{ dni_filter|default:'' }}" placeholder="🔍 Buscar por DNI..."
-                style="width:100%;padding-right:2.5rem" onkeypress="if(event.key==='Enter'){this.form.submit()}">
-            {% if dni_filter %}
-            <a href="?nivel={{ nivel_filter }}&curso={{ curso_filter }}&division={{ division_filter }}&estado={{ estado_filter }}"
-                style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#999;text-decoration:none;font-size:1.2rem"
-                title="Limpiar búsqueda">✕</a>
-            {% endif %}
+            <!-- División -->
+            <select name="division" style="flex:1;min-width:150px">
+                <option value="">División</option>
+                {% for d in divisiones %}
+                <option value="{{ d.val }}" {% if d.selected %}selected{% endif %}>{{ d.label }}</option>
+                {% endfor %}
+            </select>
         </div>
 
-        <select name="estado" onchange="this.form.submit()" style="flex:1;min-width:200px">
-            <option value="">Todos los cursos</option>
-            {% for e in estados %}
-            <option value="{{ e.val }}" {% if e.selected %}selected{% endif %}>{{ e.label }}</option>
-            {% endfor %}
-        </select>
+        <!-- Fila Inferior (Fila 2): Nombre, Apellido, DNI, Estado, Buscar -->
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+            <input type="text" name="nombre" id="searchNombre" value="{{ nombre_filter|default:'' }}" placeholder="🔍 Nombre..."
+                style="flex:1;min-width:150px">
+            <input type="text" name="apellido" id="searchApellido" value="{{ apellido_filter|default:'' }}" placeholder="🔍 Apellido..."
+                style="flex:1;min-width:150px">
+            <input type="text" name="dni" id="searchDni" value="{{ dni_filter|default:'' }}" placeholder="🔍 DNI..."
+                style="flex:1;min-width:150px">
 
-        <button type="submit" class="btn btn-primary btn-sm">Buscar</button>
+            <select name="estado" style="flex:1;min-width:200px">
+                <option value="">Todos los estados</option>
+                {% for e in estados %}
+                <option value="{{ e.val }}" {% if e.selected %}selected{% endif %}>{{ e.label }}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit" class="btn btn-primary btn-sm">Buscar</button>
+        </div>
     </form>
 
-    <div class="table-responsive">
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Alumno</th>
-                    <th>Curso</th>
-                    <th>Concepto</th>
-
-                    <th>Monto</th>
-                    <th>Estado</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for deuda in deudas %}
-                <tr>
-                    <td>{{ deuda.id }}</td>
-                    <td>{{ deuda.alumno.nombre_completo }}</td>
-                    <td>{{ deuda.alumno.curso_completo }}</td>
-                    <td>{{ deuda.concepto.nombre }}</td>
-
-                    <td>${{ deuda.monto|floatformat:0 }}</td>
-                    <td>
-                        {% if deuda.estado == 'pendiente' %}
-                        <span class="badge badge-pending">Pendiente</span>
-                        {% elif deuda.estado == 'comprobante_enviado' %}
-                        <span class="badge badge-sent">Comprobante Enviado</span>
-                        {% elif deuda.estado == 'pago_verificado' %}
-                        <span class="badge badge-verified">Pago Verificado</span>
-                        {% else %}
-                        <span class="badge">{{ deuda.get_estado_display }}</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="6" style="text-align:center;padding:2rem;color:var(--text-light)">
-                        No se encontraron deudas con los filtros seleccionados
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div id="tablaDeudasContainer">
+        {% include 'portal/admin/partials/tabla_deudas.html' %}
     </div>
-
-    <!-- Paginación -->
-    {% if deudas.has_other_pages %}
-    <div style="display:flex;justify-content:center;gap:0.5rem;margin-top:1rem">
-        {% if deudas.has_previous %}
-        <a href="?page={{ deudas.previous_page_number }}&nivel={{ nivel_filter }}&curso={{ curso_filter }}&division={{ division_filter }}&estado={{ estado_filter }}&dni={{ dni_filter }}"
-            class="btn btn-outline btn-sm">← Anterior</a>
-        {% endif %}
-        <span style="padding:0.5rem 1rem">Página {{ deudas.number }} de {{ deudas.paginator.num_pages }}</span>
-        {% if deudas.has_next %}
-        <a href="?page={{ deudas.next_page_number }}&nivel={{ nivel_filter }}&curso={{ curso_filter }}&division={{ division_filter }}&estado={{ estado_filter }}&dni={{ dni_filter }}"
-            class="btn btn-outline btn-sm">Siguiente →</a>
-        {% endif %}
-    </div>
-    {% endif %}
 </div>
+
+<!-- Modal Desglose Recaudación -->
+<div id="modalRecaudacion" class="modal-overlay" onclick="closeModalOnOuterClick(event, 'modalRecaudacion')">
+    <div class="modal" style="max-width: 450px;">
+        <div class="modal-header">
+            <h2 style="font-size: 1.25rem; color: var(--primary);">📊 Desglose Mensual</h2>
+            <button class="close-btn" onclick="closeModal('modalRecaudacion')">×</button>
+        </div>
+        <div class="modal-body" style="padding: 1rem 1.5rem;">
+            <div class="table-responsive" style="box-shadow: none;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border);">
+                            <th style="padding: 0.75rem 0.5rem; text-align: left; font-weight: 600; background: transparent;">Mes / Año</th>
+                            <th style="padding: 0.75rem 0.5rem; text-align: right; font-weight: 600; background: transparent;">Total Recaudado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pago in pagos_por_mes %}
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 0.75rem 0.5rem; text-align: left;">{{ pago.mes|date:"F Y"|capfirst }}</td>
+                            <td style="padding: 0.75rem 0.5rem; text-align: right; font-weight: 600; color: var(--success);">${{ pago.total|floatformat:0 }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2" style="text-align: center; padding: 2rem; color: var(--text-light);">No hay registros de recaudación</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('modalRecaudacion')">Cerrar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const filtroForm = document.getElementById('filtroForm');
+        const searchNombre = document.getElementById('searchNombre');
+        const searchApellido = document.getElementById('searchApellido');
+        const searchDni = document.getElementById('searchDni');
+        const container = document.getElementById('tablaDeudasContainer');
+
+        let debounceTimeout = null;
+
+        // Función para enviar la petición AJAX y actualizar el contenedor
+        function fetchDeudas(params) {
+            params.set('ajax', 'true');
+            container.style.opacity = '0.5';
+
+            fetch('?' + params.toString(), {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Error al obtener los datos');
+                }
+                return response.text();
+            })
+            .then(html => {
+                container.innerHTML = html;
+                container.style.opacity = '1';
+                
+                // Actualizar la URL de forma limpia sin ajax=true
+                const cleanParams = new URLSearchParams(params);
+                cleanParams.delete('ajax');
+                const newRelativePathQuery = window.location.pathname + '?' + cleanParams.toString();
+                history.pushState(null, '', newRelativePathQuery);
+            })
+            .catch(error => {
+                console.error(error);
+                container.style.opacity = '1';
+                showAlert('❌ Error al actualizar los datos', 'error');
+            });
+        }
+
+        // Obtener filtros serializados
+        function getFiltroParams() {
+            const formData = new FormData(filtroForm);
+            const params = new URLSearchParams();
+            for (const [key, value] of formData.entries()) {
+                if (value) {
+                    params.append(key, value);
+                }
+            }
+            return params;
+        }
+
+        // Event listener para submit manual
+        filtroForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (debounceTimeout) clearTimeout(debounceTimeout);
+            fetchDeudas(getFiltroParams());
+        });
+
+        // Trigger con debounce de 300ms en los tres campos de búsqueda
+        [searchNombre, searchApellido, searchDni].forEach(input => {
+            input.addEventListener('input', function() {
+                if (debounceTimeout) clearTimeout(debounceTimeout);
+                debounceTimeout = setTimeout(() => {
+                    const params = getFiltroParams();
+                    params.delete('page');
+                    fetchDeudas(params);
+                }, 300);
+            });
+        });
+
+        // Trigger automático para todos los selects
+        filtroForm.querySelectorAll('select').forEach(select => {
+            select.addEventListener('change', function() {
+                if (debounceTimeout) clearTimeout(debounceTimeout);
+                const params = getFiltroParams();
+                params.delete('page');
+                fetchDeudas(params);
+            });
+        });
+
+        // Interceptar clicks de la paginación dentro del contenedor
+        container.addEventListener('click', function(e) {
+            const link = e.target.closest('.pagination-link');
+            if (link) {
+                e.preventDefault();
+                const url = new URL(link.href);
+                const params = new URLSearchParams(url.search);
+                fetchDeudas(params);
+            }
+        });
+    });
+
+    function abrirModalRecaudacion() {
+        openModal('modalRecaudacion');
+    }
+
+    function closeModalOnOuterClick(event, modalId) {
+        if (event.target === document.getElementById(modalId)) {
+            closeModal(modalId);
+        }
+    }
+
+    function cobrarEfectivo(deudaId, btnElement) {
+        if (confirm('¿Confirmas que recibiste el pago en EFECTIVO por este concepto?')) {
+            const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+
+            // Mostrar un loading state sutil
+            const originalText = btnElement.textContent;
+            btnElement.textContent = '⏳';
+            btnElement.disabled = true;
+
+            fetch(`/admin-panel/deuda/${deudaId}/cobrar-efectivo/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.error || 'Error al procesar el pago') });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    showAlert('✅ Pago en efectivo registrado correctamente', 'success');
+                    
+                    const row = btnElement.closest('tr');
+                    if (row) {
+                        const estadoCell = row.cells[5];
+                        if (estadoCell) {
+                            estadoCell.innerHTML = '<span class="badge badge-verified">Pago Verificado</span>';
+                        }
+                        
+                        const efectivoCell = row.cells[6];
+                        if (efectivoCell) {
+                            efectivoCell.innerHTML = '<span style="color: #ccc;">-</span>';
+                        }
+                    }
+                } else {
+                    btnElement.textContent = originalText;
+                    btnElement.disabled = false;
+                    showAlert('❌ ' + (data.error || 'Error desconocido'), 'error');
+                }
+            })
+            .catch(error => {
+                console.error(error);
+                btnElement.textContent = originalText;
+                btnElement.disabled = false;
+                showAlert('❌ ' + error.message, 'error');
+            });
+        }
+    }
+</script>
 {% endblock %}

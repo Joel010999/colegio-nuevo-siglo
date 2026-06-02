@@ -1,0 +1,65 @@
+<div class="table-responsive">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Alumno</th>
+                <th>Curso</th>
+                <th>Concepto</th>
+                <th>Monto</th>
+                <th>Estado</th>
+                <th>Pago Efectivo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for deuda in deudas %}
+            <tr data-dni="{{ deuda.alumno.documento }}">
+                <td>{{ deuda.id }}</td>
+                <td>{{ deuda.alumno.nombre_completo }}</td>
+                <td>{{ deuda.alumno.curso_completo }}</td>
+                <td>{{ deuda.concepto.nombre }}</td>
+                <td>${{ deuda.monto|floatformat:0 }}</td>
+                <td>
+                    {% if deuda.estado == 'pendiente' %}
+                    <span class="badge badge-pending">Pendiente</span>
+                    {% elif deuda.estado == 'comprobante_enviado' %}
+                    <span class="badge badge-sent">Comprobante Enviado</span>
+                    {% elif deuda.estado == 'pago_verificado' %}
+                    <span class="badge badge-verified">Pago Verificado</span>
+                    {% else %}
+                    <span class="badge">{{ deuda.get_estado_display }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if deuda.estado == 'pendiente' %}
+                    <button type="button" class="btn btn-sm btn-efectivo" onclick="cobrarEfectivo({{ deuda.id }}, this)" style="background-color: #27ae60; color: white; border: none; padding: 0.2rem 0.5rem; font-size: 1rem; border-radius: 4px; cursor: pointer; transition: all 0.2s;" title="Marcar pagado en efectivo" onmouseover="this.style.backgroundColor='#219150'" onmouseout="this.style.backgroundColor='#27ae60'">💵</button>
+                    {% else %}
+                    <span style="color: #ccc;">-</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" style="text-align:center;padding:2rem;color:var(--text-light)">
+                    No se encontraron deudas con los filtros seleccionados
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Paginación -->
+{% if deudas.has_other_pages %}
+<div style="display:flex;justify-content:center;gap:0.5rem;margin-top:1rem">
+    {% if deudas.has_previous %}
+    <a href="?page={{ deudas.previous_page_number }}&nombre={{ nombre_filter }}&apellido={{ apellido_filter }}&dni={{ dni_filter }}&nivel={{ nivel_filter }}&curso={{ curso_filter }}&division={{ division_filter }}&estado={{ estado_filter }}"
+        class="btn btn-outline btn-sm pagination-link">← Anterior</a>
+    {% endif %}
+    <span style="padding:0.5rem 1rem">Página {{ deudas.number }} de {{ deudas.paginator.num_pages }}</span>
+    {% if deudas.has_next %}
+    <a href="?page={{ deudas.next_page_number }}&nombre={{ nombre_filter }}&apellido={{ apellido_filter }}&dni={{ dni_filter }}&nivel={{ nivel_filter }}&curso={{ curso_filter }}&division={{ division_filter }}&estado={{ estado_filter }}"
+        class="btn btn-outline btn-sm pagination-link">Siguiente →</a>
+    {% endif %}
+</div>
+{% endif %}

@@ -17,6 +17,16 @@
 
     <h4 style="margin-bottom:1rem">📋 Lista de Morosos ({{ morosos|length }})</h4>
 
+    <!-- Filtros de búsqueda por Apellido y DNI -->
+    <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+        <input type="text" id="searchApellido" class="search-input"
+            placeholder="Buscar por Apellido..." value="{{ apellido_filter }}"
+            style="padding: 0.6rem 1rem; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem; flex: 1; min-width: 180px;">
+        <input type="text" id="searchDni" class="search-input"
+            placeholder="Buscar por DNI..." value="{{ dni_filter }}"
+            style="padding: 0.6rem 1rem; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem; flex: 1; min-width: 180px;">
+    </div>
+
     <div class="table-responsive">
         <table>
             <thead>
@@ -176,6 +186,44 @@ Administración Nuevo Siglo</textarea>
 
 {% block extra_scripts %}
 <script>
+    // ==================== Filtros de búsqueda (reactivo con retención de foco) ====================
+    let searchTimeout = null;
+
+    function debouncedSearch(event) {
+        clearTimeout(searchTimeout);
+
+        // Capturamos el ID del input que el usuario está usando
+        let activeId = event.target.id;
+
+        searchTimeout = setTimeout(function() {
+            let apellido = document.getElementById('searchApellido').value;
+            let dni = document.getElementById('searchDni').value;
+
+            // Recargamos pasando los valores y sumando el input activo
+            window.location.href = '?apellido=' + encodeURIComponent(apellido) + '&dni=' + encodeURIComponent(dni) + '&focus=' + activeId;
+        }, 800);
+    }
+
+    document.getElementById('searchApellido').addEventListener('input', debouncedSearch);
+    document.getElementById('searchDni').addEventListener('input', debouncedSearch);
+
+    // Cuando la página carga, recuperamos el foco y ponemos el cursor al final
+    document.addEventListener("DOMContentLoaded", function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const focusId = urlParams.get('focus');
+
+        if (focusId) {
+            let inputToFocus = document.getElementById(focusId);
+            if (inputToFocus) {
+                inputToFocus.focus();
+                // Truco nativo para mover el cursor al final del texto
+                let val = inputToFocus.value;
+                inputToFocus.value = '';
+                inputToFocus.value = val;
+            }
+        }
+    });
+
     function abrirModalMasivo() {
         document.getElementById('modalMasivo').style.display = 'flex';
         document.getElementById('resultadoEnvio').style.display = 'none';

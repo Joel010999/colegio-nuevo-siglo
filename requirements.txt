@@ -1,4 +1,4 @@
-﻿asgiref==3.11.1
+asgiref==3.11.1
 certifi==2026.2.25
 charset-normalizer==3.4.4
 cloudinary==1.44.1
@@ -9,6 +9,8 @@ django-cloudinary-storage==0.3.0
 et_xmlfile==2.0.0
 idna==3.11
 openpyxl==3.1.5
+numpy==2.4.6
+pandas==3.0.3
 pillow==12.1.1
 psycopg2-binary==2.9.11
 python-dotenv==1.2.1

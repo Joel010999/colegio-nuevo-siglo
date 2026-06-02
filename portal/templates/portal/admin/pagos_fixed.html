@@ -17,9 +17,10 @@
         <h3 style="color:var(--success)">{{ pagos_verificados }}</h3>
         <p>Pagos Verificados</p>
     </div>
-    <div class="stat-card">
+    <div class="stat-card" onclick="abrirModalRecaudacion()" style="cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 10px 15px -3px rgba(139, 30, 63, 0.15)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow)'">
         <h3>${{ total_recaudado|floatformat:0 }}</h3>
         <p>Total Recaudado</p>
+        <span style="font-size: 0.75rem; color: var(--primary); display: block; margin-top: 0.25rem; font-weight: 500;">(Click para ver desglose)</span>
     </div>
 </div>
 
@@ -116,6 +117,43 @@
     {% endif %}
 </div>
 
+<!-- Modal Desglose Recaudación -->
+<div id="modalRecaudacion" class="modal-overlay" onclick="closeModalOnOuterClick(event, 'modalRecaudacion')">
+    <div class="modal" style="max-width: 450px;">
+        <div class="modal-header">
+            <h2 style="font-size: 1.25rem; color: var(--primary);">📊 Desglose Mensual</h2>
+            <button class="close-btn" onclick="closeModal('modalRecaudacion')">×</button>
+        </div>
+        <div class="modal-body" style="padding: 1rem 1.5rem;">
+            <div class="table-responsive" style="box-shadow: none;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border);">
+                            <th style="padding: 0.75rem 0.5rem; text-align: left; font-weight: 600; background: transparent;">Mes / Año</th>
+                            <th style="padding: 0.75rem 0.5rem; text-align: right; font-weight: 600; background: transparent;">Total Recaudado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pago in pagos_por_mes %}
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 0.75rem 0.5rem; text-align: left;">{{ pago.mes|date:"F Y"|capfirst }}</td>
+                            <td style="padding: 0.75rem 0.5rem; text-align: right; font-weight: 600; color: var(--success);">${{ pago.total|floatformat:0 }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2" style="text-align: center; padding: 2rem; color: var(--text-light);">No hay registros de recaudación</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('modalRecaudacion')">Cerrar</button>
+        </div>
+    </div>
+</div>
+
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const searchDni = document.getElementById('buscadorDniPagos');
@@ -152,5 +190,15 @@
         if (searchDni) searchDni.addEventListener('keyup', filterTable);
         if (searchNombre) searchNombre.addEventListener('keyup', filterTable);
     });
+
+    function abrirModalRecaudacion() {
+        openModal('modalRecaudacion');
+    }
+
+    function closeModalOnOuterClick(event, modalId) {
+        if (event.target === document.getElementById(modalId)) {
+            closeModal(modalId);
+        }
+    }
 </script>
 {% endblock %}

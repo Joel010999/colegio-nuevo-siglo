@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.db.models import Q, Sum, Count
+from django.db.models.functions import TruncMonth
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.core.paginator import Paginator
@@ -291,6 +292,7 @@ def admin_dashboard(request):
     pagos_verificados = Pago.objects.filter(estado='verificado').count()
     total_recaudado = Pago.objects.filter(estado='verificado').aggregate(
         total=Sum('monto_pagado'))['total'] or 0
+    pagos_por_mes = Pago.objects.filter(estado='verificado').annotate(mes=TruncMonth('fecha_envio')).values('mes').annotate(total=Sum('monto_pagado')).order_by('-mes')
     
     # Pagos recientes pendientes de verificación
     pagos_recientes = Pago.objects.filter(estado='pendiente').order_by('-fecha_envio')[:5]
@@ -302,6 +304,7 @@ def admin_dashboard(request):
         'total_recaudado': total_recaudado,
         'pagos_recientes': pagos_recientes,
         'active_tab': 'dashboard',
+        'pagos_por_mes': pagos_por_mes,
     }
     
     return render(request, 'portal/admin/dashboard.html', context)
@@ -319,14 +322,17 @@ def admin_deudas(request):
     pagos_verificados = Pago.objects.filter(estado='verificado').count()
     total_recaudado = Pago.objects.filter(estado='verificado').aggregate(
         total=Sum('monto_pagado'))['total'] or 0
+    pagos_por_mes = Pago.objects.filter(estado='verificado').annotate(mes=TruncMonth('fecha_envio')).values('mes').annotate(total=Sum('monto_pagado')).order_by('-mes')
     
     # Filtros
     nivel_filter = request.GET.get('nivel', '')
     curso_filter = request.GET.get('curso', '')
     division_filter = request.GET.get('division', '')
     estado_filter = request.GET.get('estado', '')
+    nombre_filter = request.GET.get('nombre', '').strip()
+    apellido_filter = request.GET.get('apellido', '').strip()
     dni_filter = request.GET.get('dni', '').strip()
-    
+        
     if nivel_filter:
         deudas = deudas.filter(alumno__nivel=nivel_filter)
     if curso_filter:
@@ -335,6 +341,10 @@ def admin_deudas(request):
         deudas = deudas.filter(alumno__division=division_filter)
     if estado_filter:
         deudas = deudas.filter(estado=estado_filter)
+    if nombre_filter:
+        deudas = deudas.filter(alumno__nombres__icontains=nombre_filter)
+    if apellido_filter:
+        deudas = deudas.filter(alumno__apellido__icontains=apellido_filter)
     if dni_filter:
         deudas = deudas.filter(alumno__documento__icontains=dni_filter)
     
@@ -376,6 +386,8 @@ def admin_deudas(request):
         'curso_filter': curso_filter,
         'division_filter': division_filter,
         'estado_filter': estado_filter,
+        'nombre_filter': nombre_filter,
+        'apellido_filter': apellido_filter,
         'dni_filter': dni_filter,
         'active_tab': 'deudas',
         # Estadísticas
@@ -383,8 +395,12 @@ def admin_deudas(request):
         'pagos_pendientes': pagos_pendientes,
         'pagos_verificados': pagos_verificados,
         'total_recaudado': total_recaudado,
+        'pagos_por_mes': pagos_por_mes,
     }
     
+    if request.GET.get('ajax') == 'true' or request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return render(request, 'portal/admin/partials/tabla_deudas.html', context)
+        
     return render(request, 'portal/admin/deudas_final.html', context)
 
 
@@ -400,6 +416,7 @@ def admin_pagos(request):
     pagos_verificados = Pago.objects.filter(estado='verificado').count()
     total_recaudado = Pago.objects.filter(estado='verificado').aggregate(
         total=Sum('monto_pagado'))['total'] or 0
+    pagos_por_mes = Pago.objects.filter(estado='verificado').annotate(mes=TruncMonth('fecha_envio')).values('mes').annotate(total=Sum('monto_pagado')).order_by('-mes')
     
     estado_filter = request.GET.get('estado', '')
     if estado_filter:
@@ -418,6 +435,7 @@ def admin_pagos(request):
         'pagos_pendientes': pagos_pendientes,
         'pagos_verificados': pagos_verificados,
         'total_recaudado': total_recaudado,
+        'pagos_por_mes': pagos_por_mes,
     }
     
     return render(request, 'portal/admin/pagos_fixed.html', context)
@@ -455,6 +473,41 @@ def admin_verificar_pago(request, pago_id):
     }
     
     return render(request, 'portal/admin/verificar_pago.html', context)
+
+
+@login_required
+@admin_required
+def admin_cobrar_efectivo(request, deuda_id):
+    """Cobrar una deuda en efectivo (pago rápido por ventanilla) y verificarlo asíncronamente."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+        
+    deuda = get_object_or_404(RegistroDeuda, id=deuda_id)
+    
+    if deuda.estado == 'pendiente':
+        import uuid
+        numero_op = f"EFECTIVO-{timezone.now().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
+        
+        pago = Pago.objects.create(
+            deuda=deuda,
+            monto_pagado=deuda.monto,
+            estado='pendiente',
+            usuario_responsable=request.user,
+            observaciones='Pago en Efectivo (Ventanilla)',
+            numero_operacion=numero_op
+        )
+        pago.verificar(request.user)
+        
+        # Registrar en auditoría
+        RegistroAuditoria.log(
+            request.user, 'PAYMENT_VERIFIED',
+            f'Cobro rápido en efectivo: {numero_op} - ${pago.monto_pagado} - {deuda.concepto.nombre}',
+            request
+        )
+        
+        return JsonResponse({'success': True, 'nuevo_estado': 'pago_verificado'})
+        
+    return JsonResponse({'success': False, 'error': 'La deuda no se encuentra en estado pendiente'}, status=400)
 
 
 @login_required
@@ -640,6 +693,10 @@ def admin_crear_alumno(request):
 @admin_required
 def admin_avisos(request):
     """Envío de avisos de deuda."""
+    # Capturar filtros GET
+    dni_filter = request.GET.get('dni', '').strip()
+    apellido_filter = request.GET.get('apellido', '').strip()
+
     # Obtener morosos (deudas pendientes agrupadas por alumno)
     morosos = []
     alumnos_con_deuda = Alumno.objects.filter(
@@ -647,6 +704,12 @@ def admin_avisos(request):
     ).annotate(
         total_deuda=Sum('deudas__monto', filter=Q(deudas__estado='pendiente'))
     ).distinct()
+
+    # Aplicar filtros al queryset
+    if dni_filter:
+        alumnos_con_deuda = alumnos_con_deuda.filter(documento__icontains=dni_filter)
+    if apellido_filter:
+        alumnos_con_deuda = alumnos_con_deuda.filter(apellido__icontains=apellido_filter)
     
     for alumno in alumnos_con_deuda:
         # Buscar email del responsable
@@ -667,6 +730,8 @@ def admin_avisos(request):
         'morosos': morosos,
         'config': ConfiguracionSistema.get_config(),
         'active_tab': 'avisos',
+        'dni_filter': dni_filter,
+        'apellido_filter': apellido_filter,
     }
     
     return render(request, 'portal/admin/avisos.html', context)
@@ -845,22 +910,44 @@ def admin_archivos(request):
 @login_required
 @admin_required
 def admin_importar(request):
-    """Importar deudas desde Excel o CSV - Soporta formato del colegio."""
-    import openpyxl
+    """
+    Procesador Unificado de Deudas - Importa desde dos archivos (Sistema Azul + Sistema Rojo).
+    
+    Sistema Azul: Cuotas y Matrícula (.xlsx o .csv)
+    Sistema Rojo: Jornada Extendida y Materiales (.xlsx o .csv)
+    
+    Ambos archivos se fusionan por Documento (DNI) en un solo DataFrame consolidado
+    antes de procesarse contra la base de datos.
+    """
+    import pandas as pd
     from io import BytesIO
     import re
     
     resultados = None
     
-    if request.method == 'POST' and request.FILES.get('archivo'):
-        archivo = request.FILES['archivo']
+    if request.method == 'POST':
+        # ============================================================
+        # PASO 0: Recepción y validación de ambos archivos
+        # ============================================================
+        archivo_azul = request.FILES.get('archivo_azul')
+        archivo_rojo = request.FILES.get('archivo_rojo')
+        
+        print("[1/4] Archivos recibidos. Leyendo DataFrames...")
+        
+        if not archivo_azul or not archivo_rojo:
+            messages.error(request, '❌ Debe cargar ambos archivos: Sistema Azul y Sistema Rojo.')
+            # Redirigir a archivos si viene de ahí
+            next_url = request.POST.get('next')
+            if next_url:
+                return redirect(next_url)
+            return redirect('portal:admin_archivos')
+        
         reemplazar = request.POST.get('reemplazar') == 'on'
-        filename = archivo.name.lower()
         
         config = ConfiguracionSistema.get_config()
-        # Pre-hash: hashear la password una sola vez (no 460 veces en el loop)
         from django.contrib.auth.hashers import make_password
         hashed_default_pwd = make_password(config.password_default)
+        
         added = 0
         updated = 0
         skipped = 0
@@ -869,101 +956,161 @@ def admin_importar(request):
         errores = []
         
         try:
-            # Upsert no-destructivo: NO se borran deudas existentes.
-            # Los pagos verificados y comprobantes enviados se preservan.
+            # ============================================================
+            # PASO 1: Leer ambos archivos con pandas
+            # ============================================================
+            def leer_archivo_a_dataframe(archivo_upload):
+                """Lee un archivo Excel o CSV y devuelve un DataFrame de pandas."""
+                fname = archivo_upload.name.lower()
+                raw_bytes = archivo_upload.read()
+                
+                if fname.endswith(('.xlsx', '.xls')):
+                    df = pd.read_excel(BytesIO(raw_bytes), dtype=str, engine='openpyxl')
+                elif fname.endswith('.csv'):
+                    # Intentar UTF-8 primero, luego latin-1
+                    try:
+                        content = raw_bytes.decode('utf-8-sig')
+                    except UnicodeDecodeError:
+                        content = raw_bytes.decode('latin-1')
+                    from io import StringIO
+                    # Detectar delimitador
+                    sample = content.split('\n')[0] if '\n' in content else content
+                    delimiter = ';' if sample.count(';') > sample.count(',') else ','
+                    df = pd.read_csv(StringIO(content), delimiter=delimiter, dtype=str)
+                else:
+                    raise ValueError(f'Formato no soportado: {fname}. Use .xlsx, .xls o .csv')
+                
+                # Limpiar headers: quitar espacios
+                df.columns = [str(c).strip() for c in df.columns]
+                
+                # Scanner dinámico: si la primera fila no tiene 'Documento',
+                # buscar en las primeras 10 filas la fila de headers real
+                header_cols_lower = [c.lower() for c in df.columns]
+                if 'documento' not in header_cols_lower and 'apellido' not in header_cols_lower:
+                    for i in range(min(10, len(df))):
+                        row_vals = [str(v).strip() for v in df.iloc[i].values]
+                        row_lower = [v.lower() for v in row_vals]
+                        if 'documento' in row_lower and 'apellido' in row_lower:
+                            # Re-leer usando esta fila como header
+                            df.columns = row_vals
+                            df = df.iloc[i+1:].reset_index(drop=True)
+                            df.columns = [str(c).strip() for c in df.columns]
+                            break
+                
+                return df
+            
+            print("[IMPORTAR] Leyendo archivo Sistema Azul...")
+            df_azul = leer_archivo_a_dataframe(archivo_azul)
+            print(f"[IMPORTAR] Sistema Azul: {len(df_azul)} filas, columnas: {list(df_azul.columns[:10])}...")
+            
+            print("[IMPORTAR] Leyendo archivo Sistema Rojo...")
+            df_rojo = leer_archivo_a_dataframe(archivo_rojo)
+            print(f"[IMPORTAR] Sistema Rojo: {len(df_rojo)} filas, columnas: {list(df_rojo.columns[:10])}...")
             
             # ============================================================
-            # PASO 1: Extraer datos crudos en una matriz genérica
-            # Soporta Excel (.xlsx/.xls) y CSV (.csv) de forma unificada.
-            # Scanner dinámico: busca la fila de headers en las primeras 10 filas.
+            # PASO 2: Mapeo de columnas del Sistema Azul
+            # El archivo Azul usa "1_Cuota", "2_Cuota", etc.
+            # La base de datos espera "1_Cuota Marzo", "2_Cuota Abril", etc.
             # ============================================================
-            all_rows_raw = []  # Lista de listas (cada fila es una lista de valores)
+            MAPEO_CUOTAS_AZUL = {
+                '1_Cuota': '1_Cuota Marzo',
+                '2_Cuota': '2_Cuota Abril',
+                '3_Cuota': '3_Cuota Mayo',
+                '4_Cuota': '4_Cuota Junio',
+                '5_Cuota': '5_Cuota Julio',
+                '6_Cuota': '6_Cuota Agosto',
+                '7_Cuota': '7_Cuota Septiembre',
+                '8_Cuota': '8_Cuota Octubre',
+                '9_Cuota': '9_Cuota Noviembre',
+                '10_Cuota': '10_Cuota Diciembre',
+            }
             
-            if filename.endswith(('.xlsx', '.xls')):
-                wb = openpyxl.load_workbook(BytesIO(archivo.read()))
-                ws = wb.active
-                for row in ws.iter_rows(values_only=True):
-                    all_rows_raw.append(list(row))
+            # Aplicar rename al DataFrame azul (solo columnas que existan)
+            rename_map = {k: v for k, v in MAPEO_CUOTAS_AZUL.items() if k in df_azul.columns}
+            if rename_map:
+                df_azul = df_azul.rename(columns=rename_map)
+                print(f"[IMPORTAR] Columnas renombradas en Azul: {rename_map}")
             
-            elif filename.endswith('.csv'):
-                raw_bytes = archivo.read()
-                try:
-                    decoded = raw_bytes.decode('utf-8-sig')
-                except UnicodeDecodeError:
-                    decoded = raw_bytes.decode('latin-1')
-                lines = decoded.strip().split('\n')
-                # Detectar delimitador con la primera línea no-vacía
-                sample_line = next((l for l in lines if l.strip()), '')
-                delimiter = ';' if sample_line.count(';') > sample_line.count(',') else ','
-                import io
-                for line in lines:
-                    reader = csv.reader(io.StringIO(line), delimiter=delimiter)
-                    for parsed_row in reader:
-                        all_rows_raw.append(parsed_row)
-                        break
-            else:
-                messages.error(request, 'Formato no soportado. Use Excel (.xlsx) o CSV (.csv)')
-                return render(request, 'portal/admin/importar.html', {'active_tab': 'importar'})
-            
-            if not all_rows_raw:
-                messages.error(request, 'El archivo está vacío.')
-                return render(request, 'portal/admin/importar.html', {'active_tab': 'importar'})
+            print(f"[2/4] Sistema Azul ({len(df_azul)} filas) | Sistema Rojo ({len(df_rojo)} filas)")
             
             # ============================================================
-            # PASO 2: Scanner dinámico de headers
-            # Busca en las primeras 10 filas la que contenga 'documento' y 'apellido'.
+            # PASO 3: Fusión (Merge) de ambos DataFrames por Documento
+            # Usamos outer join para no perder alumnos de ningún sistema.
+            # Las columnas compartidas (Apellido, Nombres, Niv, etc.) se
+            # toman del Azul como prioridad (_x), con fallback al Rojo (_y).
             # ============================================================
-            headers = []
-            headers_raw = []
-            header_row_idx = None
             
-            scan_limit = min(10, len(all_rows_raw))
-            for i in range(scan_limit):
-                row_lower = [str(cell).strip().lower() if cell else '' for cell in all_rows_raw[i]]
-                if 'documento' in row_lower and 'apellido' in row_lower:
-                    header_row_idx = i
-                    headers = row_lower
-                    headers_raw = [str(cell).strip() if cell else '' for cell in all_rows_raw[i]]
-                    break
+            # Normalizar nombre de columna Documento
+            for df_target, nombre_sistema in [(df_azul, 'Azul'), (df_rojo, 'Rojo')]:
+                cols_lower = {c.lower(): c for c in df_target.columns}
+                if 'documento' not in cols_lower:
+                    raise ValueError(f'El archivo {nombre_sistema} no contiene la columna "Documento".')
             
-            if header_row_idx is None:
-                messages.error(request, 'No se encontró la fila de encabezados (debe contener "Documento" y "Apellido") en las primeras 10 filas.')
-                return render(request, 'portal/admin/importar.html', {'active_tab': 'importar'})
+            # Encontrar el nombre exacto de la columna Documento en cada DF
+            doc_col_azul = next(c for c in df_azul.columns if c.lower() == 'documento')
+            doc_col_rojo = next(c for c in df_rojo.columns if c.lower() == 'documento')
             
-            # Las filas de datos son las que siguen al header
-            data_rows = all_rows_raw[header_row_idx + 1:]
+            # Estandarizar a 'Documento' en ambos
+            df_azul = df_azul.rename(columns={doc_col_azul: 'Documento'})
+            df_rojo = df_rojo.rename(columns={doc_col_rojo: 'Documento'})
+            
+            # Convertir Documento a numérico para el merge (quitar .0, espacios, etc.)
+            df_azul['Documento'] = pd.to_numeric(df_azul['Documento'], errors='coerce')
+            df_rojo['Documento'] = pd.to_numeric(df_rojo['Documento'], errors='coerce')
+            
+            # Eliminar filas sin documento válido
+            df_azul = df_azul.dropna(subset=['Documento'])
+            df_rojo = df_rojo.dropna(subset=['Documento'])
+            df_azul['Documento'] = df_azul['Documento'].astype(int)
+            df_rojo['Documento'] = df_rojo['Documento'].astype(int)
+            
+            # Hacer el merge (outer join para no perder alumnos)
+            df_merged = pd.merge(df_azul, df_rojo, on='Documento', how='outer', suffixes=('_azul', '_rojo'))
+            
+            print(f"[IMPORTAR] DataFrame fusionado: {len(df_merged)} filas, {len(df_merged.columns)} columnas")
             
             # ============================================================
-            # PASO 3: Detectar formato colegio vs estándar
-            # Formato colegio: columnas de concepto tienen patrón "dígito_nombre"
-            # Esto evita falsos positivos con headers como tutor_email, nombre_alumno, etc.
+            # PASO 3.5: Resolver columnas duplicadas de datos del alumno
+            # Prioridad: Azul > Rojo para Apellido, Nombres, Niv, Cur, Div, Familia
+            # ============================================================
+            COLUMNAS_ALUMNO = ['Apellido', 'Nombres', 'Niv', 'Cur', 'Div', 'Familia']
+            for col_base in COLUMNAS_ALUMNO:
+                col_azul = f'{col_base}_azul'
+                col_rojo = f'{col_base}_rojo'
+                if col_azul in df_merged.columns and col_rojo in df_merged.columns:
+                    # Prioridad azul, fallback rojo
+                    df_merged[col_base] = df_merged[col_azul].fillna(df_merged[col_rojo])
+                    df_merged = df_merged.drop(columns=[col_azul, col_rojo])
+                elif col_azul in df_merged.columns:
+                    df_merged = df_merged.rename(columns={col_azul: col_base})
+                elif col_rojo in df_merged.columns:
+                    df_merged = df_merged.rename(columns={col_rojo: col_base})
+                # Si col_base ya existe directamente (sin sufijo), no hacer nada
+            
+            # ============================================================
+            # PASO 4: Detectar columnas de concepto (patrón dígito_nombre)
             # ============================================================
             concepto_pattern = re.compile(r'^\d+_')
-            concepto_columns = [
-                (idx, h_raw) for idx, (h, h_raw) in enumerate(zip(headers, headers_raw))
-                if concepto_pattern.match(h)
-            ]
-            is_colegio_format = (
-                'documento' in headers and
-                'apellido' in headers and
-                len(concepto_columns) > 0
-            )
+            concepto_columns = [c for c in df_merged.columns if concepto_pattern.match(c)]
             
-            # Diagnóstico (visible en logs de Railway)
-            print(f"[IMPORTAR] Header en fila {header_row_idx + 1}: {headers_raw[:5]}...")
-            print(f"[IMPORTAR] Formato: {'COLEGIO' if is_colegio_format else 'ESTÁNDAR'} | Conceptos detectados: {len(concepto_columns)}")
+            print(f"[IMPORTAR] Columnas de concepto detectadas ({len(concepto_columns)}): {concepto_columns[:10]}...")
+            
+            if not concepto_columns:
+                messages.error(request, '❌ No se detectaron columnas de concepto (formato N_Nombre) en los archivos fusionados.')
+                next_url = request.POST.get('next')
+                if next_url:
+                    return redirect(next_url)
+                return redirect('portal:admin_archivos')
             
             # ============================================================
-            # PASO 4: Procesar datos
+            # PASO 5: Pre-registrar conceptos y procesar deudas en transacción
             # ============================================================
-            if is_colegio_format:
-                # FORMATO DEL COLEGIO - Columnas pivoteadas
-                
-                # Ocultar template viejo: marcar todos los conceptos como inactivos
+            from django.db import transaction
+            
+            with transaction.atomic():
                 ConceptoDeuda.objects.all().update(orden=9999)
                 
-                # Pre-registrar conceptos del Excel con su orden de columna
-                for col_idx, concepto_header in concepto_columns:
+                for col_order, concepto_header in enumerate(concepto_columns):
                     c_nombre = str(concepto_header).strip()
                     if len(c_nombre) > 20:
                         c_codigo = (c_nombre[:10] + c_nombre[-10:]).upper().replace(' ', '_')
@@ -971,44 +1118,52 @@ def admin_importar(request):
                         c_codigo = c_nombre.upper().replace(' ', '_')
                     concepto_obj, _ = ConceptoDeuda.objects.get_or_create(
                         codigo=c_codigo,
-                        defaults={'nombre': c_nombre, 'orden': col_idx}
+                        defaults={'nombre': c_nombre, 'orden': col_order}
                     )
                     concepto_obj.nombre = c_nombre
-                    concepto_obj.orden = col_idx
+                    concepto_obj.orden = col_order
                     concepto_obj.save()
                 
-                # Procesar cada fila de datos
-                for data_row_offset, row_values in enumerate(data_rows):
-                    row_idx = header_row_idx + 2 + data_row_offset  # Número de fila real (1-indexed)
+                # ============================================================
+                # PASO 6: Iterar sobre el DataFrame fusionado y procesar
+                # ============================================================
+                total_filas = len(df_merged)
+                print("[3/4] Fusión completa. Iniciando procesamiento en Base de Datos...")
+                
+                for index, (row_idx, row) in enumerate(df_merged.iterrows()):
+                    fila_num = row_idx + 2  # Para mensajes de error (1-indexed + header)
                     
-                    if not any(v for v in row_values if v is not None and str(v).strip()):
-                        continue
+                    if index % 50 == 0:
+                        print(f"Procesando alumno {index}/{total_filas}...")
                     
-                    # Crear diccionario con headers
-                    row_dict = {}
-                    for i, value in enumerate(row_values):
-                        if i < len(headers):
-                            row_dict[headers[i]] = value
-                    
-                    # Extraer datos del alumno
-                    dni_val = row_dict.get('documento')
-                    if not dni_val:
-                        errores.append(f'Fila {row_idx}: Sin documento')
+                    # --- Datos del alumno ---
+                    dni_val = row.get('Documento')
+                    if pd.isna(dni_val):
+                        errores.append(f'Fila {fila_num}: Sin documento')
                         skipped += 1
                         continue
                     
                     try:
                         dni_alumno = int(dni_val)
-                    except:
-                        errores.append(f'Fila {row_idx}: DNI inválido "{dni_val}"')
+                    except (ValueError, TypeError):
+                        errores.append(f'Fila {fila_num}: DNI inválido "{dni_val}"')
                         skipped += 1
                         continue
                     
-                    apellido = str(row_dict.get('apellido', '')).strip()
-                    nombres = str(row_dict.get('nombres', '')).strip()
-                    nivel = str(row_dict.get('niv', '')).strip()
-                    curso = str(row_dict.get('cur', '')).strip()
-                    division = str(row_dict.get('div', '')).strip()
+                    # Extraer datos del alumno (case-insensitive lookup)
+                    def get_col(name, default=''):
+                        """Busca columna por nombre (case-insensitive)."""
+                        for c in df_merged.columns:
+                            if c.lower() == name.lower():
+                                val = row.get(c)
+                                return str(val).strip() if pd.notna(val) else default
+                        return default
+                    
+                    apellido = get_col('Apellido')
+                    nombres = get_col('Nombres')
+                    nivel = get_col('Niv')
+                    curso = get_col('Cur')
+                    division = get_col('Div')
                     
                     # Crear/obtener alumno
                     alumno, alumno_created = Alumno.objects.get_or_create(
@@ -1025,6 +1180,12 @@ def admin_importar(request):
                     # Actualizar datos si cambió
                     if not alumno_created:
                         updated_alumno = False
+                        if apellido and alumno.apellido != apellido:
+                            alumno.apellido = apellido
+                            updated_alumno = True
+                        if nombres and alumno.nombres != nombres:
+                            alumno.nombres = nombres
+                            updated_alumno = True
                         if nivel and alumno.nivel != nivel:
                             alumno.nivel = nivel
                             updated_alumno = True
@@ -1054,38 +1215,37 @@ def admin_importar(request):
                         )
                         users_created += 1
                     
-                    # Procesar cada columna de concepto
-                    for col_idx, concepto_header in concepto_columns:
-                        monto_val = row_values[col_idx] if col_idx < len(row_values) else None
+                    # --- Procesar cada columna de concepto (BLINDAJE DE DEUDAS) ---
+                    for concepto_header in concepto_columns:
+                        monto_val = row.get(concepto_header)
                         
-                        if monto_val is None or str(monto_val).strip() == '' or monto_val == 0:
-                            continue  # Sin deuda en este concepto
+                        # Filtrar vacíos, nulos y ceros
+                        if pd.isna(monto_val) or str(monto_val).strip() == '' or monto_val == 0 or str(monto_val).strip() == '0':
+                            continue
                         
-                        # Código único derivado del header completo (sin split)
+                        # Código único del concepto
                         c_nombre = str(concepto_header).strip()
                         if len(c_nombre) > 20:
                             concepto_codigo = (c_nombre[:10] + c_nombre[-10:]).upper().replace(' ', '_')
                         else:
                             concepto_codigo = c_nombre.upper().replace(' ', '_')
                         
-                        # Obtener o crear concepto (ya pre-registrados, pero por seguridad)
                         concepto, _ = ConceptoDeuda.objects.get_or_create(
                             codigo=concepto_codigo,
-                            defaults={'nombre': c_nombre, 'orden': col_idx}
+                            defaults={'nombre': c_nombre, 'orden': 0}
                         )
                         
-                        # Validar valores especiales (Texto)
+                        # --- Validar valores especiales de texto ---
                         val_str = str(monto_val).lower().strip()
+                        
                         if 'pagad' in val_str:
-                            # Marcar como pagado (monto 0)
                             deuda_existente = RegistroDeuda.objects.filter(
-                                alumno=alumno,
-                                concepto=concepto
+                                alumno=alumno, concepto=concepto
                             ).first()
                             
                             if deuda_existente:
-                                # Proteger pagos verificados/comprobantes enviados
-                                if deuda_existente.estado in ('pago_verificado', 'comprobante_enviado'):
+                                # REGLA DE ORO: proteger estados verificados
+                                if deuda_existente.estado in ('pagado', 'pago_verificado', 'comprobante_enviado'):
                                     skipped += 1
                                     continue
                                 if reemplazar and deuda_existente.estado == 'pendiente':
@@ -1097,25 +1257,19 @@ def admin_importar(request):
                                     duplicados += 1
                             else:
                                 RegistroDeuda.objects.create(
-                                    alumno=alumno,
-                                    concepto=concepto,
-                                    monto=0,
-                                    periodo='',
-                                    estado='pagado'
+                                    alumno=alumno, concepto=concepto,
+                                    monto=0, periodo='', estado='pagado'
                                 )
                                 added += 1
                             continue
                         
                         if 'no corresponde' in val_str or 'nocorresponde' in val_str:
-                            # Marcar como "No Corresponde"
                             deuda_existente = RegistroDeuda.objects.filter(
-                                alumno=alumno,
-                                concepto=concepto
+                                alumno=alumno, concepto=concepto
                             ).first()
                             
                             if deuda_existente:
-                                # Proteger pagos verificados/comprobantes enviados
-                                if deuda_existente.estado in ('pago_verificado', 'comprobante_enviado'):
+                                if deuda_existente.estado in ('pagado', 'pago_verificado', 'comprobante_enviado'):
                                     skipped += 1
                                     continue
                                 if reemplazar and deuda_existente.estado == 'pendiente':
@@ -1127,76 +1281,74 @@ def admin_importar(request):
                                     duplicados += 1
                             else:
                                 RegistroDeuda.objects.create(
-                                    alumno=alumno,
-                                    concepto=concepto,
-                                    monto=0,
-                                    periodo='',
-                                    estado='no_corresponde'
+                                    alumno=alumno, concepto=concepto,
+                                    monto=0, periodo='', estado='no_corresponde'
                                 )
                                 added += 1
                             continue
-
+                        
+                        # --- Valor numérico ---
                         try:
-                            monto = Decimal(str(monto_val).replace(',', '.'))
+                            monto = Decimal(str(monto_val).replace(',', '.').strip())
                             if monto <= 0:
                                 continue
                         except:
                             continue
-
+                        
                         # Verificar duplicado (mismo alumno + concepto)
+                        # order_by('-id') es CRÍTICO para ver siempre el estado de la última cuota generada
                         deuda_existente = RegistroDeuda.objects.filter(
-                            alumno=alumno,
-                            concepto=concepto
-                        ).first()
+                            alumno=alumno, concepto=concepto
+                        ).order_by('-id').first()
+                        
+                        CONCEPTOS_RECURRENTES = [
+                            '25_INGLES PETS', '26_INGLES FCES', '27_HORA COMPLEMENTARIA',
+                            '29_JORNADA EXTENDIDA', '31_CUOTA ADMISION', '31_CUOTA FEBRERO',
+                            '33_JORNADA EXT 3 DIAS', '33_JORNADA EXTEND 3 DIA', 
+                            '35_INGLES KET', '36_INGLES MATERIAL', '37_OLIMPIADAS'
+                        ]
                         
                         if deuda_existente:
-                            # Proteger pagos verificados/comprobantes enviados
-                            if deuda_existente.estado in ('pago_verificado', 'comprobante_enviado'):
-                                skipped += 1
-                                continue
-                            if reemplazar and deuda_existente.estado == 'pendiente':
-                                deuda_existente.monto = monto
-                                deuda_existente.save()
-                                updated += 1
+                            # Si la última deuda generada está pagada/verificada...
+                            if deuda_existente.estado in ('pagado', 'pago_verificado', 'comprobante_enviado'):
+                                
+                                es_recurrente = any(c_rec in concepto_header for c_rec in CONCEPTOS_RECURRENTES)
+                                
+                                if es_recurrente:
+                                    # Opción 1: Crear una NUEVA deuda (cajoncito nuevo) para este concepto recurrente
+                                    RegistroDeuda.objects.create(
+                                        alumno=alumno, concepto=concepto,
+                                        monto=monto, periodo='', estado='pendiente'
+                                    )
+                                    added += 1
+                                else:
+                                    # REGLA DE ORO NORMAL: Proteger y omitir
+                                    skipped += 1
+                                    continue
+                                    
+                            # Si la última deuda sigue pendiente, actualizar para absorber recargos
+                            elif deuda_existente.estado == 'pendiente':
+                                if deuda_existente.monto != monto:
+                                    deuda_existente.monto = monto
+                                    deuda_existente.save()
+                                    updated += 1
+                                else:
+                                    duplicados += 1
                             else:
                                 duplicados += 1
                         else:
+                            # Si no existe ninguna deuda previa, crearla normalmente
                             RegistroDeuda.objects.create(
-                                alumno=alumno,
-                                concepto=concepto,
-                                monto=monto,
-                                periodo='',
-                                estado='pendiente'
+                                alumno=alumno, concepto=concepto,
+                                monto=monto, periodo='', estado='pendiente'
                             )
                             added += 1
             
-            else:
-                # FORMATO ESTÁNDAR - Una fila por deuda
-                for data_row_offset, row_values in enumerate(data_rows):
-                    row_idx = header_row_idx + 2 + data_row_offset
-                    
-                    if not any(v for v in row_values if v is not None and str(v).strip()):
-                        continue
-                    
-                    row_dict = {}
-                    for i, value in enumerate(row_values):
-                        if i < len(headers) and headers[i]:
-                            row_dict[headers[i]] = str(value).strip() if value is not None else ''
-                    
-                    result = procesar_fila_estandar(row_idx, row_dict, config, reemplazar, hashed_default_pwd)
-                    if result['status'] == 'added':
-                        added += 1
-                    elif result['status'] == 'updated':
-                        updated += 1
-                    elif result['status'] == 'duplicado':
-                        duplicados += 1
-                    elif result['status'] == 'error':
-                        skipped += 1
-                        errores.append(result['error'])
-                    if result.get('user_created'):
-                        users_created += 1
+            print("[4/4] Importación exitosa. Redirigiendo...")
             
-            # Guardar resultados
+            # ============================================================
+            # PASO 7: Resultados y auditoría
+            # ============================================================
             resultados = {
                 'added': added,
                 'updated': updated,
@@ -1209,26 +1361,35 @@ def admin_importar(request):
             
             RegistroAuditoria.log(
                 request.user, 'IMPORT',
-                f'Importación: {added} nuevas, {updated} actualizadas, {duplicados} duplicados, {skipped} omitidas, {users_created} usuarios',
+                f'Importación Unificada (Azul+Rojo): {added} nuevas, {updated} actualizadas, '
+                f'{duplicados} duplicados, {skipped} omitidas, {users_created} usuarios',
                 request
             )
             
             if added > 0 or updated > 0:
-                messages.success(request, f'✅ Importación completada: {added} deudas nuevas, {updated} actualizadas, {users_created} usuarios creados')
+                messages.success(
+                    request,
+                    f'✅ Importación completada: {added} deudas nuevas, {updated} actualizadas, '
+                    f'{users_created} usuarios creados'
+                )
             if duplicados > 0:
                 messages.warning(request, f'⚠️ {duplicados} registros duplicados no fueron importados (ya existen)')
             if skipped > 0:
-                messages.warning(request, f'⚠️ {skipped} registros omitidos por errores')
+                messages.warning(request, f'⚠️ {skipped} registros omitidos (protegidos o con errores)')
                 
         except Exception as e:
-            messages.error(request, f'Error al procesar el archivo: {str(e)}')
+            import traceback
+            print(f"[IMPORTAR] ERROR: {traceback.format_exc()}")
+            messages.error(request, f'Error al procesar los archivos: {str(e)}')
     
-    context = {
-        'active_tab': 'importar',
-        'resultados': resultados,
-    }
+    # Guardar resultados en sesión y redirigir a archivos
+    if resultados:
+        request.session['import_resultados'] = resultados
     
-    return render(request, 'portal/admin/importar.html', context)
+    next_url = request.POST.get('next')
+    if next_url:
+        return redirect(next_url)
+    return redirect('portal:admin_archivos')
 
 
 def procesar_fila_estandar(row_idx, row, config, reemplazar, hashed_default_pwd):
