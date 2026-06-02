@@ -488,19 +488,82 @@ def admin_verificar_pago(request, pago_id):
 @login_required
 @admin_required
 def admin_cobrar_efectivo(request, deuda_id):
-    """Cobrar una deuda en efectivo (pago rápido por ventanilla) y verificarlo asíncronamente."""
+    """Cobrar una deuda en efectivo (pago rápido por ventanilla).
+    
+    Para Material Didáctico, acepta un JSON body con tipo_pago:
+      - 'cuota': Pago parcial de $40.000, la deuda sigue pendiente con saldo reducido.
+      - 'total': Pago por el 100% del saldo restante, la deuda queda como pago_verificado.
+    Para el resto de conceptos, mantiene el flujo original (pago total directo).
+    """
+    import json as json_module
+    
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
         
     deuda = get_object_or_404(RegistroDeuda, id=deuda_id)
     
-    if deuda.estado == 'pendiente':
-        import uuid
+    if deuda.estado != 'pendiente':
+        return JsonResponse({'success': False, 'error': 'La deuda no se encuentra en estado pendiente'}, status=400)
+    
+    # Leer body JSON si viene (desde el modal de Material Didáctico)
+    tipo_pago = 'total'  # Default: pago completo (comportamiento original)
+    try:
+        body = json_module.loads(request.body)
+        tipo_pago = body.get('tipo_pago', 'total')
+    except (json_module.JSONDecodeError, ValueError):
+        pass  # No hay body JSON → flujo estándar
+    
+    import uuid
+    CUOTA_MATERIAL = Decimal('40000')
+    
+    if tipo_pago == 'cuota' and deuda.monto > CUOTA_MATERIAL:
+        # =============================================
+        # PAGO PARCIAL: Cuota mensual de $40.000
+        # =============================================
         numero_op = f"EFECTIVO-{timezone.now().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
+        
+        # Crear registro del pago parcial en la tabla Pago (impacta en caja)
+        pago = Pago.objects.create(
+            deuda=deuda,
+            monto_pagado=CUOTA_MATERIAL,
+            estado='verificado',
+            usuario_responsable=request.user,
+            usuario_verificador=request.user,
+            fecha_verificacion=timezone.now(),
+            observaciones='Pago en Efectivo (Parcial) - Material Didáctico',
+            numero_operacion=numero_op
+        )
+        
+        # Descontar el monto de la deuda (sigue pendiente)
+        deuda.monto -= CUOTA_MATERIAL
+        deuda.fecha_pago = timezone.now().date()
+        deuda.save()
+        
+        # Auditoría
+        RegistroAuditoria.log(
+            request.user, 'PAYMENT_VERIFIED',
+            f'Cobro parcial Material Didáctico: {numero_op} - $40.000 de ${deuda.monto + CUOTA_MATERIAL} - Saldo restante: ${deuda.monto}',
+            request
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'nuevo_estado': 'pendiente',
+            'nuevo_monto': float(deuda.monto),
+            'mensaje': f'Pago parcial de $40.000 registrado. Saldo restante: ${deuda.monto:,.0f}'
+        })
+    
+    else:
+        # =============================================
+        # PAGO TOTAL (flujo original para cualquier concepto)
+        # =============================================
+        numero_op = f"EFECTIVO-{timezone.now().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
+        
+        monto_pagado = deuda.monto
         
         pago = Pago.objects.create(
             deuda=deuda,
-            monto_pagado=deuda.monto,
+            monto_pagado=monto_pagado,
             estado='pendiente',
             usuario_responsable=request.user,
             observaciones='Pago en Efectivo (Ventanilla)',
@@ -511,13 +574,16 @@ def admin_cobrar_efectivo(request, deuda_id):
         # Registrar en auditoría
         RegistroAuditoria.log(
             request.user, 'PAYMENT_VERIFIED',
-            f'Cobro rápido en efectivo: {numero_op} - ${pago.monto_pagado} - {deuda.concepto.nombre}',
+            f'Cobro rápido en efectivo: {numero_op} - ${monto_pagado} - {deuda.concepto.nombre}',
             request
         )
         
-        return JsonResponse({'success': True, 'nuevo_estado': 'pago_verificado'})
-        
-    return JsonResponse({'success': False, 'error': 'La deuda no se encuentra en estado pendiente'}, status=400)
+        return JsonResponse({
+            'success': True,
+            'nuevo_estado': 'pago_verificado',
+            'mensaje': f'Pago total de ${monto_pagado:,.0f} registrado correctamente'
+        })
+
 
 
 @login_required
@@ -1304,6 +1370,95 @@ def admin_importar(request):
                                 continue
                         except:
                             continue
+                        
+                        # ==========================================================
+                        # LÓGICA YANINA: Tratamiento especial para 20_Material Didactico
+                        # Cuando la deuda base está pagada/verificada, NO la tocamos
+                        # (protege el recibo). En su lugar, creamos/actualizamos un
+                        # ítem "Ajuste Material Didáctico" pendiente.
+                        # Resiste múltiples subidas de Excel durante el mismo mes.
+                        # ==========================================================
+                        NOMBRE_COL_MATERIAL = '20_Material Didactico'
+                        CONCEPTO_AJUSTE_MATERIAL = 'Ajuste Material Didáctico'
+                        
+                        es_material_didactico = (c_nombre == NOMBRE_COL_MATERIAL)
+                        
+                        if es_material_didactico:
+                            # Buscar la deuda BASE de Material Didáctico del alumno
+                            deuda_base = RegistroDeuda.objects.filter(
+                                alumno=alumno, concepto=concepto
+                            ).order_by('id').first()
+                            
+                            if deuda_base:
+                                if deuda_base.estado == 'pendiente':
+                                    # Caso 1: La deuda base está pendiente → actualizar monto
+                                    if deuda_base.monto != monto:
+                                        deuda_base.monto = monto
+                                        deuda_base.save()
+                                        updated += 1
+                                    else:
+                                        duplicados += 1
+                                elif deuda_base.estado in ('pagado', 'pago_verificado', 'comprobante_enviado'):
+                                    # Caso 2: La deuda base ya fue pagada → NO tocar
+                                    # Buscar o crear concepto "Ajuste Material Didáctico"
+                                    ajuste_codigo = CONCEPTO_AJUSTE_MATERIAL.upper().replace(' ', '_').replace('Á', 'A').replace('É', 'E').replace('Í', 'I').replace('Ó', 'O').replace('Ú', 'U')
+                                    concepto_ajuste, _ = ConceptoDeuda.objects.get_or_create(
+                                        codigo=ajuste_codigo,
+                                        defaults={
+                                            'nombre': CONCEPTO_AJUSTE_MATERIAL,
+                                            'orden': concepto.orden + 1,  # Aparece justo después de Material Didáctico
+                                        }
+                                    )
+                                    
+                                    # Buscar si ya existe un ajuste PENDIENTE para este alumno
+                                    ajuste_pendiente = RegistroDeuda.objects.filter(
+                                        alumno=alumno,
+                                        concepto=concepto_ajuste,
+                                        estado='pendiente'
+                                    ).order_by('-id').first()
+                                    
+                                    if ajuste_pendiente:
+                                        # Ya existe un ajuste pendiente → actualizar monto
+                                        if ajuste_pendiente.monto != monto:
+                                            ajuste_pendiente.monto = monto
+                                            ajuste_pendiente.save()
+                                            updated += 1
+                                        else:
+                                            duplicados += 1
+                                    else:
+                                        # No existe ajuste pendiente (o los anteriores ya están pagados)
+                                        # → Crear uno nuevo
+                                        RegistroDeuda.objects.create(
+                                            alumno=alumno,
+                                            concepto=concepto_ajuste,
+                                            monto=monto,
+                                            periodo='',
+                                            estado='pendiente',
+                                            observaciones='Generado automáticamente por Lógica Yanina (deuda base ya pagada)',
+                                        )
+                                        added += 1
+                                else:
+                                    # Estado parcial u otro → tratar como pendiente (actualizar)
+                                    if deuda_base.monto != monto:
+                                        deuda_base.monto = monto
+                                        deuda_base.save()
+                                        updated += 1
+                                    else:
+                                        duplicados += 1
+                            else:
+                                # No existe ninguna deuda base → crear la primera normalmente
+                                RegistroDeuda.objects.create(
+                                    alumno=alumno, concepto=concepto,
+                                    monto=monto, periodo='', estado='pendiente'
+                                )
+                                added += 1
+                            
+                            # Saltar la lógica estándar para esta columna
+                            continue
+                        
+                        # ==========================================================
+                        # LÓGICA ESTÁNDAR para todas las demás columnas
+                        # ==========================================================
                         
                         # Verificar duplicado (mismo alumno + concepto)
                         # order_by('-id') es CRÍTICO para ver siempre el estado de la última cuota generada

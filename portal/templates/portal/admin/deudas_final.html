@@ -116,6 +116,62 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Pago Material Didáctico -->
+<div id="modalMaterial" class="modal-overlay" onclick="closeModalOnOuterClick(event, 'modalMaterial')">
+    <div class="modal" style="max-width: 480px;">
+        <div class="modal-header">
+            <h2 style="font-size: 1.25rem; color: var(--primary);">💵 Registrar Pago Presencial - Material Didáctico</h2>
+            <button class="close-btn" onclick="closeModal('modalMaterial')">×</button>
+        </div>
+        <div class="modal-body" style="padding: 1.25rem 1.5rem;">
+            <!-- Info del alumno -->
+            <div style="background: var(--bg); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem;">
+                <p style="margin: 0; font-size: 0.9rem; color: var(--text-light);">Alumno:</p>
+                <p id="materialAlumnoNombre" style="margin: 0; font-weight: 600; font-size: 1.05rem;"></p>
+            </div>
+
+            <div style="background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; text-align: center;">
+                <p style="margin: 0; font-size: 0.85rem; opacity: 0.9;">Monto Total Pendiente</p>
+                <p id="materialMontoTotal" style="margin: 0; font-size: 1.75rem; font-weight: 700;"></p>
+            </div>
+
+            <p style="font-weight: 600; margin-bottom: 0.75rem; color: var(--text);">Seleccione el tipo de pago:</p>
+
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <!-- Opción 1: Cuota mensual -->
+                <label id="labelCuotaMensual" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 1rem; border: 2px solid var(--border); border-radius: 10px; cursor: pointer; transition: all 0.2s; margin: 0;"
+                    onmouseover="this.style.borderColor='var(--primary)'; this.style.background='#fdf2f5'"
+                    onmouseout="if(!this.querySelector('input').checked){this.style.borderColor='var(--border)'; this.style.background='transparent'}">
+                    <input type="radio" name="tipo_pago_material" id="radioCuota" value="cuota"
+                        style="width: 18px; height: 18px; min-width: 18px; accent-color: var(--primary); margin: 0; padding: 0;"
+                        onchange="actualizarSeleccionMaterial()" checked>
+                    <span style="font-size: 0.95rem;">Abonar cuota mensual (<strong>$40.000</strong>)</span>
+                </label>
+
+                <!-- Opción 2: Total restante -->
+                <label id="labelTotalRestante" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 1rem; border: 2px solid var(--border); border-radius: 10px; cursor: pointer; transition: all 0.2s; margin: 0;"
+                    onmouseover="this.style.borderColor='var(--primary)'; this.style.background='#fdf2f5'"
+                    onmouseout="if(!this.querySelector('input').checked){this.style.borderColor='var(--border)'; this.style.background='transparent'}">
+                    <input type="radio" name="tipo_pago_material" id="radioTotal" value="total"
+                        style="width: 18px; height: 18px; min-width: 18px; accent-color: var(--primary); margin: 0; padding: 0;"
+                        onchange="actualizarSeleccionMaterial()">
+                    <span style="font-size: 0.95rem;">Abonar el Total Restante (<strong id="materialMontoTotalOpcion">$0</strong>)</span>
+                </label>
+            </div>
+
+            <!-- Campo oculto para el ID de la deuda -->
+            <input type="hidden" id="materialDeudaId" value="">
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('modalMaterial')">Cancelar</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btnConfirmarMaterial" onclick="confirmarPagoMaterial()"
+                style="background: #27ae60; border-color: #27ae60;">
+                ✅ Confirmar Pago en Efectivo
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -225,7 +281,55 @@
         }
     }
 
+    // Constante cuota mensual Material Didáctico
+    const CUOTA_MATERIAL = 40000;
+
+    // Nombres de concepto que activan el modal especial
+    const CONCEPTOS_MATERIAL = ['20_Material Didactico', 'Ajuste Material Didáctico'];
+
+    function esMaterialDidactico(conceptoNombre) {
+        return CONCEPTOS_MATERIAL.some(c => conceptoNombre.includes(c) || conceptoNombre.includes('Material Did'));
+    }
+
     function cobrarEfectivo(deudaId, btnElement) {
+        const conceptoNombre = btnElement.getAttribute('data-concepto') || '';
+        const montoTotal = parseFloat(btnElement.getAttribute('data-monto')) || 0;
+        const alumnoNombre = btnElement.getAttribute('data-alumno') || '';
+
+        // =============================================
+        // MATERIAL DIDÁCTICO → Abrir modal especial
+        // =============================================
+        if (esMaterialDidactico(conceptoNombre)) {
+            // Cargar datos en el modal
+            document.getElementById('materialDeudaId').value = deudaId;
+            document.getElementById('materialAlumnoNombre').textContent = alumnoNombre;
+            document.getElementById('materialMontoTotal').textContent = '$' + Math.round(montoTotal).toLocaleString('es-AR');
+            document.getElementById('materialMontoTotalOpcion').textContent = '$' + Math.round(montoTotal).toLocaleString('es-AR');
+
+            // Resetear radio buttons
+            document.getElementById('radioCuota').checked = true;
+            actualizarSeleccionMaterial();
+
+            // Si el monto es <= $40.000, ocultar opción de cuota (no tiene sentido)
+            const labelCuota = document.getElementById('labelCuotaMensual');
+            if (montoTotal <= CUOTA_MATERIAL) {
+                labelCuota.style.display = 'none';
+                document.getElementById('radioTotal').checked = true;
+                actualizarSeleccionMaterial();
+            } else {
+                labelCuota.style.display = 'flex';
+            }
+
+            // Guardar referencia al botón original para actualizar la fila después
+            document.getElementById('modalMaterial')._btnOriginal = btnElement;
+
+            openModal('modalMaterial');
+            return; // No ejecutar el flujo estándar
+        }
+
+        // =============================================
+        // FLUJO ESTÁNDAR para todas las demás deudas
+        // =============================================
         if (confirm('¿Confirmas que recibiste el pago en EFECTIVO por este concepto?')) {
             const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
 
@@ -277,6 +381,95 @@
                 showAlert('❌ ' + error.message, 'error');
             });
         }
+    }
+
+    // Actualizar visual de los radio buttons del modal Material
+    function actualizarSeleccionMaterial() {
+        const radioCuota = document.getElementById('radioCuota');
+        const radioTotal = document.getElementById('radioTotal');
+        const labelCuota = document.getElementById('labelCuotaMensual');
+        const labelTotal = document.getElementById('labelTotalRestante');
+
+        // Reset ambos
+        labelCuota.style.borderColor = 'var(--border)';
+        labelCuota.style.background = 'transparent';
+        labelTotal.style.borderColor = 'var(--border)';
+        labelTotal.style.background = 'transparent';
+
+        // Resaltar el seleccionado
+        if (radioCuota.checked) {
+            labelCuota.style.borderColor = 'var(--primary)';
+            labelCuota.style.background = '#fdf2f5';
+        } else {
+            labelTotal.style.borderColor = 'var(--primary)';
+            labelTotal.style.background = '#fdf2f5';
+        }
+    }
+
+    // Confirmar pago desde el modal Material Didáctico
+    function confirmarPagoMaterial() {
+        const deudaId = document.getElementById('materialDeudaId').value;
+        const tipoPago = document.querySelector('input[name="tipo_pago_material"]:checked').value;
+        const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+        const btnConfirmar = document.getElementById('btnConfirmarMaterial');
+
+        // Loading state
+        const originalText = btnConfirmar.innerHTML;
+        btnConfirmar.innerHTML = '⏳ Procesando...';
+        btnConfirmar.disabled = true;
+
+        fetch(`/admin-panel/deuda/${deudaId}/cobrar-efectivo/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ tipo_pago: tipoPago })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.error || 'Error al procesar el pago') });
+            }
+            return response.json();
+        })
+        .then(data => {
+            btnConfirmar.innerHTML = originalText;
+            btnConfirmar.disabled = false;
+
+            if (data.success) {
+                closeModal('modalMaterial');
+                showAlert('✅ ' + (data.mensaje || 'Pago registrado correctamente'), 'success');
+
+                // Actualizar la fila en la tabla
+                const modal = document.getElementById('modalMaterial');
+                const btnOriginal = modal._btnOriginal;
+                if (btnOriginal) {
+                    const row = btnOriginal.closest('tr');
+                    if (row) {
+                        if (data.nuevo_estado === 'pago_verificado') {
+                            // Pago total → marcar como verificado
+                            row.cells[5].innerHTML = '<span class="badge badge-verified">Pago Verificado</span>';
+                            row.cells[4].textContent = '$0';
+                            row.cells[6].innerHTML = '<span style="color: #ccc;">-</span>';
+                        } else if (data.nuevo_estado === 'pendiente') {
+                            // Pago parcial → actualizar el monto mostrado
+                            row.cells[4].textContent = '$' + Math.round(data.nuevo_monto).toLocaleString('es-AR');
+                            // Actualizar el data-monto del botón para la próxima vez
+                            btnOriginal.setAttribute('data-monto', data.nuevo_monto);
+                        }
+                    }
+                }
+            } else {
+                showAlert('❌ ' + (data.error || 'Error desconocido'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error(error);
+            btnConfirmar.innerHTML = originalText;
+            btnConfirmar.disabled = false;
+            showAlert('❌ ' + error.message, 'error');
+        });
     }
 </script>
 {% endblock %}

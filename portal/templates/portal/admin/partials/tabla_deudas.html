@@ -32,7 +32,12 @@
                 </td>
                 <td>
                     {% if deuda.estado == 'pendiente' %}
-                    <button type="button" class="btn btn-sm btn-efectivo" onclick="cobrarEfectivo({{ deuda.id }}, this)" style="background-color: #27ae60; color: white; border: none; padding: 0.2rem 0.5rem; font-size: 1rem; border-radius: 4px; cursor: pointer; transition: all 0.2s;" title="Marcar pagado en efectivo" onmouseover="this.style.backgroundColor='#219150'" onmouseout="this.style.backgroundColor='#27ae60'">💵</button>
+                    <button type="button" class="btn btn-sm btn-efectivo" onclick="cobrarEfectivo({{ deuda.id }}, this)"
+                        data-concepto="{{ deuda.concepto.nombre }}" data-monto="{{ deuda.monto }}"
+                        data-alumno="{{ deuda.alumno.nombre_completo }}"
+                        style="background-color: #27ae60; color: white; border: none; padding: 0.2rem 0.5rem; font-size: 1rem; border-radius: 4px; cursor: pointer; transition: all 0.2s;"
+                        title="Marcar pagado en efectivo" onmouseover="this.style.backgroundColor='#219150'"
+                        onmouseout="this.style.backgroundColor='#27ae60'">💵</button>
                     {% else %}
                     <span style="color: #ccc;">-</span>
                     {% endif %}
